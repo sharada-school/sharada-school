@@ -43,13 +43,16 @@ export function Login({ onLogin }) {
     e.preventDefault();
     setError('');
     setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
     try {
       if (!name.trim()) throw new Error('Full name is required');
       if (password.length < 6) throw new Error('Password must be at least 6 characters');
       const response = await apiFetch('/api/register/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password })
+        body: JSON.stringify({ name, email, password }),
+        signal: controller.signal
       });
       if (response.ok) {
         setRegistrationData({ email, name, password });
@@ -61,8 +64,11 @@ export function Login({ onLogin }) {
         setError(result.error || 'Unable to register. Please try again.');
       }
     } catch (err) {
-      setError(err.message || 'Unable to register. Please check your details.');
+      setError(err.name === 'AbortError'
+        ? 'The request timed out. Check the server email settings and try again.'
+        : err.message || 'Unable to register. Please check your details.');
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };

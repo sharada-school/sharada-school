@@ -1,6 +1,9 @@
+const dns = require('node:dns');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { OtpChallenge } = require('../db');
+
+dns.setDefaultResultOrder('ipv4first');
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
@@ -9,6 +12,9 @@ const mailTransport = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 587),
   secure: String(process.env.SMTP_SECURE).toLowerCase() === 'true',
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 20000,
   auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined
 });
 
@@ -38,7 +44,12 @@ const createOtpChallenge = async (email, purpose, payload = {}) => {
     payload,
     expiresAt: new Date(Date.now() + OTP_TTL_MS)
   });
-  await sendOtp(email, code, purpose);
+  try {
+    await sendOtp(email, code, purpose);
+  } catch (error) {
+    await OtpChallenge.deleteMany({ email, purpose });
+    throw error;
+  }
 };
 
 const consumeOtp = async (email, purpose, code) => {
