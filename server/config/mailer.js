@@ -1,21 +1,63 @@
 const dns = require('node:dns');
+const os = require('node:os');
 const crypto = require('crypto');
+
+// 1. Force Node.js DNS to prefer IPv4 first globally
+dns.setDefaultResultOrder('ipv4first');
+
+// 2. Prevent Nodemailer v10 from detecting IPv6 support on container/host interfaces.
+// Nodemailer queries AAAA (IPv6) records whenever os.networkInterfaces() reports an IPv6 interface.
+// On cloud containers (Render, Docker, etc.) without an outbound IPv6 gateway, this causes:
+// "connect ENETUNREACH 2607:f8b0:... - Local (:::0)"
+const origNetworkInterfaces = os.networkInterfaces;
+if (origNetworkInterfaces) {
+  os.networkInterfaces = function () {
+    const ifaces = origNetworkInterfaces.apply(this, arguments);
+    const ipv4Only = {};
+    for (const [name, addrs] of Object.entries(ifaces || {})) {
+      ipv4Only[name] = (addrs || []).filter(a => a.family === 'IPv4' || a.family === 4);
+    }
+    return ipv4Only;
+  };
+}
+
+try {
+  const nmShared = require('nodemailer/dist/cjs/shared/index.js');
+  if (nmShared && nmShared.networkInterfaces) {
+    for (const key of Object.keys(nmShared.networkInterfaces)) {
+      nmShared.networkInterfaces[key] = (nmShared.networkInterfaces[key] || []).filter(
+        a => a.family === 'IPv4' || a.family === 4
+      );
+    }
+  }
+} catch {
+  // Ignored if nodemailer bundle structure differs
+}
+
 const nodemailer = require('nodemailer');
 const { OtpChallenge } = require('../db');
-
-dns.setDefaultResultOrder('ipv4first');
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
 
+const port = Number(process.env.SMTP_PORT || 587);
+const isPort465 = port === 465;
+const secure = process.env.SMTP_SECURE !== undefined
+  ? String(process.env.SMTP_SECURE).toLowerCase() === 'true'
+  : isPort465;
+
 const mailTransport = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT || 587),
-  secure: String(process.env.SMTP_SECURE).toLowerCase() === 'true',
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 20000,
-  auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port,
+  secure,
+  family: 4,
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 30000,
+  auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+  tls: {
+    rejectUnauthorized: false
+  }
 });
 
 const hashOtp = (email, purpose, code) =>
@@ -44,11 +86,34 @@ const createOtpChallenge = async (email, purpose, payload = {}) => {
     payload,
     expiresAt: new Date(Date.now() + OTP_TTL_MS)
   });
+
+  // Always log OTP for administrative recovery, monitoring, and debugging
+  console.log(`🔑 [OTP] Verification code generated for ${email} (${purpose}): ${code}`);
+
   try {
     await sendOtp(email, code, purpose);
+    return { sent: true };
   } catch (error) {
+    console.error(`❌ [OTP] Failed to send email to ${email}:`, error.message);
+
+    // If ALLOW_CONSOLE_OTP is enabled, do not delete the challenge so the admin/user can use console OTP
+    if (process.env.ALLOW_CONSOLE_OTP === 'true') {
+      console.warn(`⚠️ [OTP] ALLOW_CONSOLE_OTP is enabled. Verification challenge remains active for ${email}.`);
+      return { sent: false, warning: 'Email delivery failed, but console OTP fallback is active. Enter the code shown in server logs.' };
+    }
+
     await OtpChallenge.deleteMany({ email, purpose });
-    throw error;
+
+    let friendlyMessage = error.message;
+    if (error.code === 'ENETUNREACH' || error.message.includes('ENETUNREACH')) {
+      friendlyMessage = 'Email server network unreachable (IPv6 route unavailable). Server has been updated to force IPv4.';
+    } else if (error.message.includes('timeout') || error.code === 'ETIMEDOUT') {
+      friendlyMessage = 'Email connection timed out. If running on Render Free Tier, note that outbound SMTP ports (465/587) are blocked by Render. Enable ALLOW_CONSOLE_OTP=true in environment settings.';
+    }
+
+    const err = new Error(friendlyMessage);
+    err.originalError = error;
+    throw err;
   }
 };
 

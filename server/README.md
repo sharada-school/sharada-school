@@ -37,7 +37,6 @@ npm run dev
 ```
 Client will run at `http://localhost:5173` and proxy requests to `http://localhost:4000`.
 
-## Default Admin Credentials
-- Email: `admin@sharada.edu`
-- Password: `admin123`
+## Initial Admin Account
+Set `ADMIN_INITIAL_PASSWORD` in the server environment before first startup. The server creates `admin@sharada.edu` with that password only when no admin account exists, and stores a bcrypt-based password hash. Existing admin passwords are not overwritten on startup.
 

@@ -48,8 +48,8 @@ const registerRequest = async (req, res) => {
 
   try {
     const passwordHash = await hashPassword(password);
-    await createOtpChallenge(email, 'registration', { name, passwordHash });
-    res.json({ message: 'Verification code sent to your email.' });
+    const result = await createOtpChallenge(email, 'registration', { name, passwordHash });
+    res.json({ message: result?.warning || 'Verification code sent to your email.' });
   } catch (error) {
     res.status(503).json({ error: error.message });
   }
@@ -76,9 +76,11 @@ const passwordResetRequest = async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   try {
     if (await User.exists({ email })) {
-      await createOtpChallenge(email, 'password-reset');
+      const result = await createOtpChallenge(email, 'password-reset');
+      res.json({ message: result?.warning || 'If an account exists, a verification code was sent to its email.' });
+    } else {
+      res.json({ message: 'If an account exists, a verification code was sent to its email.' });
     }
-    res.json({ message: 'If an account exists, a verification code was sent to its email.' });
   } catch (error) {
     res.status(503).json({ error: error.message });
   }

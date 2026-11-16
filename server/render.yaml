@@ -9,6 +9,8 @@ services:
     envVars:
       - key: PORT
         value: 10000
+      - key: NODE_OPTIONS
+        value: --dns-result-order=ipv4first
       - key: DATABASE_URL
         sync: false
       - key: SMTP_HOST
@@ -25,3 +27,5 @@ services:
         value: noreply@sharada.edu
       - key: OTP_SECRET
         sync: false
+      - key: ALLOW_CONSOLE_OTP
+        value: "false"

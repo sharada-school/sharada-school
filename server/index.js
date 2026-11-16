@@ -1,3 +1,22 @@
+const dns = require('node:dns');
+const os = require('node:os');
+
+// Force IPv4 lookup globally across the Node.js process
+dns.setDefaultResultOrder('ipv4first');
+
+// In environments without outbound IPv6 routing (e.g. Render, Docker containers, some ISPs),
+// having an IPv6 interface causes libraries like Nodemailer to query AAAA records and fail
+// with "connect ENETUNREACH 2607:f8b0:... - Local (:::0)". Filter out IPv6 interfaces.
+const origNetworkInterfaces = os.networkInterfaces;
+os.networkInterfaces = function () {
+  const ifaces = origNetworkInterfaces.apply(this, arguments);
+  const ipv4Only = {};
+  for (const [name, addrs] of Object.entries(ifaces || {})) {
+    ipv4Only[name] = (addrs || []).filter(a => a.family === 'IPv4' || a.family === 4);
+  }
+  return ipv4Only;
+};
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
