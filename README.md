@@ -1,2 +1,0 @@
-# Client
-Its front end
