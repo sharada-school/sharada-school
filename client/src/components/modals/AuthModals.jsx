@@ -4,9 +4,9 @@ import { apiFetch } from '../../api/client';
 
 export function Login({ onLogin }) {
   const [screen, setScreen] = useState('main'); // 'main', 'register-email', 'register-otp', 'login', 'forgot-password', 'forgot-otp', 'reset-password'
-  const [email, setEmail] = useState('admin@sharada.edu');
+  const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [password, setPassword] = useState('admin123');
+  const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -188,8 +188,8 @@ export function Login({ onLogin }) {
     setError('');
     setSuccess('');
     setOtp('');
-    setEmail('admin@sharada.edu');
-    setPassword('admin123');
+    setEmail('');
+    setPassword('');
     setName('');
     setNewPassword('');
     setConfirmPassword('');

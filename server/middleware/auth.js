@@ -1,8 +1,8 @@
 const crypto = require('crypto');
-const { User } = require('../db');
 
 const sessions = new Map();
 const passwordResetTokens = new Map();
+const SESSION_TTL_MS = 30 * 60 * 1000;
 
 const createSession = (user) => {
   const token = crypto.randomUUID();
@@ -11,7 +11,8 @@ const createSession = (user) => {
     name: user.name,
     email: user.email || '',
     phone: user.phone || '',
-    role: user.role || 'teacher'
+    role: user.role || 'teacher',
+    expiresAt: Date.now() + SESSION_TTL_MS
   });
   return token;
 };
@@ -19,7 +20,10 @@ const createSession = (user) => {
 const requireAuth = (req, res, next) => {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
   const session = token ? sessions.get(token) : null;
-  if (!session) return res.status(401).json({ error: 'Authentication required' });
+  if (!session || session.expiresAt <= Date.now()) {
+    if (token) sessions.delete(token);
+    return res.status(401).json({ error: 'Authentication required' });
+  }
   req.user = session;
   next();
 };
@@ -32,13 +36,9 @@ const requireRole = (role) => (req, res, next) => {
 const requireParentAuth = async (req, res, next) => {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
   let session = token ? sessions.get(token) : null;
-
-  if (!session && req.headers['x-parent-phone']) {
-    const cleanPhone = String(req.headers['x-parent-phone']).replace(/\D/g, '').slice(-10);
-    const user = await User.findOne({ phone: cleanPhone, role: 'parent' }).lean();
-    if (user) {
-      session = { id: user._id.toString(), name: user.name, phone: user.phone, role: 'parent' };
-    }
+  if (session?.expiresAt <= Date.now()) {
+    sessions.delete(token);
+    session = null;
   }
 
   if (!session) return res.status(401).json({ error: 'Parent authentication required. Please log in with phone number.' });

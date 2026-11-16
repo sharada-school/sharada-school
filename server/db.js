@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const { hashPassword } = require('./utils/passwords');
 
 let connectionString = process.env.DATABASE_URL || '';
 
@@ -318,7 +319,8 @@ const User = {
     const email = data.email ? String(data.email).toLowerCase().trim().replace(/^["']|["']$/g, '') : null;
     const phone = data.phone ? String(data.phone).trim().replace(/^["']|["']$/g, '') : null;
     const name = String(data.name || '').trim().replace(/^["']|["']$/g, '');
-    const password = String(data.password || '').trim().replace(/^["']|["']$/g, '');
+    const rawPassword = String(data.password || '').trim().replace(/^["']|["']$/g, '');
+    const password = data.passwordHash || (rawPassword ? await hashPassword(rawPassword) : '');
     const role = data.role || 'teacher';
 
     const res = await pool.query(
@@ -347,7 +349,9 @@ const User = {
     const params = [];
     const fields = {
       name: updateData.name ? String(updateData.name).trim().replace(/^["']|["']$/g, '') : undefined,
-      password: updateData.password ? String(updateData.password).trim().replace(/^["']|["']$/g, '') : undefined,
+      password: updateData.passwordHash || (updateData.password
+        ? await hashPassword(String(updateData.password).trim().replace(/^["']|["']$/g, ''))
+        : undefined),
       role: updateData.role,
       phone: updateData.phone ? String(updateData.phone).trim().replace(/^["']|["']$/g, '') : undefined,
       email: updateData.email ? String(updateData.email).toLowerCase().trim().replace(/^["']|["']$/g, '') : undefined

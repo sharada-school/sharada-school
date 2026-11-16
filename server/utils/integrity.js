@@ -17,19 +17,23 @@ const ensureDefaultAdmin = async () => {
     // 2. Fetch existing admin or create/update with default admin credentials
     let existing = await User.findOne({ email: 'admin@sharada.edu' });
     if (!existing) {
+      if (!process.env.ADMIN_INITIAL_PASSWORD) {
+        console.warn('ADMIN_INITIAL_PASSWORD is not set; the initial admin account was not created.');
+        return;
+      }
       await User.create({
         email: 'admin@sharada.edu',
-        password: 'admin123',
+        password: process.env.ADMIN_INITIAL_PASSWORD,
         name: 'School Admin',
         role: 'admin'
       });
-      console.log('✅ Created default admin account: admin@sharada.edu / admin123');
+      console.log('✅ Created initial admin account from ADMIN_INITIAL_PASSWORD.');
     } else {
       await User.updateOne(
         { id: existing.id },
-        { role: 'admin', password: 'admin123', name: existing.name || 'School Admin' }
+        { role: 'admin', name: existing.name || 'School Admin' }
       );
-      console.log('✅ Verified & synchronized admin account: admin@sharada.edu / admin123');
+      console.log('✅ Verified admin account role.');
     }
   } catch (err) {
     console.error('Error ensuring default admin:', err.message);
