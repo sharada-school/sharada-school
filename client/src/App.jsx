@@ -10,7 +10,8 @@ import {
   Menu,
   Plus,
   ShieldCheck,
-  Users
+  Users,
+  X
 } from 'lucide-react';
 import { readSession, writeSession, clearSession, apiFetch } from './api/client';
 import { getClassLabel, getStudentName, getStudentMarks, getStudentByRef } from './utils/formatters';
@@ -30,6 +31,7 @@ export function App() {
     return activeSession?.user || null;
   });
   const [view, setView] = useState('overview');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
@@ -91,6 +93,22 @@ export function App() {
     return () => clearInterval(timer);
   }, [user]);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false);
+    };
+    if (mobileMenuOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
   const handleLogin = (userData) => {
     writeSession(userData);
     setUser(userData);
@@ -99,6 +117,7 @@ export function App() {
   const handleLogout = () => {
     clearSession();
     setUser(null);
+    setMobileMenuOpen(false);
   };
 
   if (!user) return <Login onLogin={handleLogin} />;
