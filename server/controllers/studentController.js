@@ -31,79 +31,108 @@ const getStudentById = async (req, res) => {
 };
 
 const createStudent = async (req, res) => {
-  if (!req.body.parentMobile || !String(req.body.parentMobile).trim()) {
-    return res.status(400).json({ error: 'Parent mobile number is required.' });
-  }
+  try {
+    const firstName = String(req.body.firstName || req.body.first_name || '').trim();
+    const lastName = String(req.body.lastName || req.body.last_name || '').trim();
+    const admissionNo = String(req.body.admissionNo || req.body.admission_no || '').trim();
+    const className = String(req.body.className || req.body.class_name || '').trim();
+    const parentMobile = String(req.body.parentMobile || req.body.parent_mobile || '').trim();
 
-  const student = await Student.create({
-    ...req.body,
-    rollNumber: req.body.rollNumber ? Number(req.body.rollNumber) : null,
-    academicYear: req.body.academicYear || '2024-2025',
-    status: req.body.status || 'Active',
-    parentMobile: req.body.parentMobile || '',
-    parentName: req.body.parentName || '',
-    parentEmail: req.body.parentEmail || '',
-    grade: req.body.grade || ''
-  });
-  await captureAudit('create', 'students', student, req.body, req.user);
-  res.status(201).json(serialize(student));
+    if (!firstName) return res.status(400).json({ error: 'First name is required.' });
+    if (!lastName) return res.status(400).json({ error: 'Last name is required.' });
+    if (!admissionNo) return res.status(400).json({ error: 'Admission number is required.' });
+    if (!className) return res.status(400).json({ error: 'Class name is required.' });
+    if (!parentMobile) return res.status(400).json({ error: 'Parent mobile number is required.' });
+
+    const student = await Student.create({
+      ...req.body,
+      firstName,
+      lastName,
+      admissionNo,
+      className,
+      parentMobile,
+      rollNumber: req.body.rollNumber !== undefined && req.body.rollNumber !== '' && req.body.rollNumber !== null ? Number(req.body.rollNumber) : null,
+      academicYear: req.body.academicYear || '2024-2025',
+      status: req.body.status || 'Active',
+      parentName: req.body.parentName || '',
+      parentEmail: req.body.parentEmail || '',
+      grade: req.body.grade || ''
+    });
+    await captureAudit('create', 'students', student, req.body, req.user);
+    res.status(201).json(serialize(student));
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'A student with this admission number already exists.' });
+    }
+    console.error('Error creating student:', error);
+    res.status(500).json({ error: error.message || 'Failed to create student.' });
+  }
 };
 
 const updateStudent = async (req, res) => {
-  if (!req.body.parentMobile || !String(req.body.parentMobile).trim()) {
-    return res.status(400).json({ error: 'Parent mobile number is required.' });
-  }
-
-  const existing = await Student.findById(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Student not found' });
-
-  const existingHistory = Array.isArray(existing.academicHistory) ? [...existing.academicHistory] : [];
-  const targetYear = req.body.academicYear || existing.academicYear || '2024-2025';
-  const targetClass = req.body.className || existing.className || '';
-
-  if (existing.academicYear && existing.academicYear !== targetYear) {
-    if (!existingHistory.some((h) => h.academicYear === existing.academicYear)) {
-      existingHistory.push({
-        academicYear: existing.academicYear,
-        className: existing.className || '',
-        section: existing.section || '',
-        status: 'Completed',
-        promotedAt: new Date()
-      });
+  try {
+    const parentMobile = String(req.body.parentMobile || req.body.parent_mobile || '').trim();
+    if (req.body.parentMobile !== undefined && !parentMobile) {
+      return res.status(400).json({ error: 'Parent mobile number is required.' });
     }
-    await Mark.updateMany(
+
+    const existing = await Student.findById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Student not found' });
+
+    const existingHistory = Array.isArray(existing.academicHistory) ? [...existing.academicHistory] : [];
+    const targetYear = req.body.academicYear || existing.academicYear || '2024-2025';
+    const targetClass = req.body.className || existing.className || '';
+
+    if (existing.academicYear && existing.academicYear !== targetYear) {
+      if (!existingHistory.some((h) => h.academicYear === existing.academicYear)) {
+        existingHistory.push({
+          academicYear: existing.academicYear,
+          className: existing.className || '',
+          section: existing.section || '',
+          status: 'Completed',
+          promotedAt: new Date()
+        });
+      }
+      await Mark.updateMany(
+        {
+          studentId: existing._id,
+          $or: [
+            { academicYear: null },
+            { academicYear: '' },
+            { academicYear: { $exists: false } }
+          ]
+        },
+        { $set: { academicYear: existing.academicYear, className: existing.className } }
+      );
+    }
+
+    const student = await Student.findByIdAndUpdate(
+      req.params.id,
       {
-        studentId: existing._id,
-        $or: [
-          { academicYear: null },
-          { academicYear: '' },
-          { academicYear: { $exists: false } }
-        ]
+        ...req.body,
+        rollNumber: req.body.rollNumber !== undefined && req.body.rollNumber !== '' && req.body.rollNumber !== null ? Number(req.body.rollNumber) : null,
+        academicYear: targetYear,
+        className: targetClass,
+        status: req.body.status || existing.status || 'Active',
+        parentMobile: parentMobile || existing.parentMobile || '',
+        parentName: req.body.parentName !== undefined ? req.body.parentName : (existing.parentName || ''),
+        parentEmail: req.body.parentEmail !== undefined ? req.body.parentEmail : (existing.parentEmail || ''),
+        grade: req.body.grade || '',
+        academicHistory: existingHistory
       },
-      { $set: { academicYear: existing.academicYear, className: existing.className } }
+      { new: true }
     );
+
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    await captureAudit('update', 'students', student, req.body, req.user);
+    res.json(serialize(student));
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'A student with this admission number already exists.' });
+    }
+    console.error('Error updating student:', error);
+    res.status(500).json({ error: error.message || 'Failed to update student.' });
   }
-
-  const student = await Student.findByIdAndUpdate(
-    req.params.id,
-    {
-      ...req.body,
-      rollNumber: req.body.rollNumber ? Number(req.body.rollNumber) : null,
-      academicYear: targetYear,
-      className: targetClass,
-      status: req.body.status || existing.status || 'Active',
-      parentMobile: req.body.parentMobile || '',
-      parentName: req.body.parentName || '',
-      parentEmail: req.body.parentEmail || '',
-      grade: req.body.grade || '',
-      academicHistory: existingHistory
-    },
-    { new: true }
-  );
-
-  if (!student) return res.status(404).json({ error: 'Student not found' });
-  await captureAudit('update', 'students', student, req.body, req.user);
-  res.json(serialize(student));
 };
 
 const promoteStudents = async (req, res) => {

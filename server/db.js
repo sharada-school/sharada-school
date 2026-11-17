@@ -1,5 +1,4 @@
 const { Pool } = require('pg');
-const { hashPassword } = require('./utils/passwords');
 
 let connectionString = process.env.DATABASE_URL || '';
 
@@ -319,8 +318,7 @@ const User = {
     const email = data.email ? String(data.email).toLowerCase().trim().replace(/^["']|["']$/g, '') : null;
     const phone = data.phone ? String(data.phone).trim().replace(/^["']|["']$/g, '') : null;
     const name = String(data.name || '').trim().replace(/^["']|["']$/g, '');
-    const rawPassword = String(data.password || '').trim().replace(/^["']|["']$/g, '');
-    const password = data.passwordHash || (rawPassword ? await hashPassword(rawPassword) : '');
+    const password = String(data.password || '').trim().replace(/^["']|["']$/g, '');
     const role = data.role || 'teacher';
 
     const res = await pool.query(
@@ -349,9 +347,7 @@ const User = {
     const params = [];
     const fields = {
       name: updateData.name ? String(updateData.name).trim().replace(/^["']|["']$/g, '') : undefined,
-      password: updateData.passwordHash || (updateData.password
-        ? await hashPassword(String(updateData.password).trim().replace(/^["']|["']$/g, ''))
-        : undefined),
+      password: updateData.password ? String(updateData.password).trim().replace(/^["']|["']$/g, '') : undefined,
       role: updateData.role,
       phone: updateData.phone ? String(updateData.phone).trim().replace(/^["']|["']$/g, '') : undefined,
       email: updateData.email ? String(updateData.email).toLowerCase().trim().replace(/^["']|["']$/g, '') : undefined
@@ -561,7 +557,7 @@ const Student = {
         data.parentEmail || data.parent_email || '',
         data.className || data.class_name,
         data.section || '',
-        data.rollNumber !== undefined ? Number(data.rollNumber) : null,
+        data.rollNumber !== undefined && data.rollNumber !== '' && data.rollNumber !== null ? Number(data.rollNumber) : null,
         data.academicYear || data.academic_year || '2024-2025',
         data.status || 'Active',
         JSON.stringify(data.academicHistory || data.academic_history || []),
@@ -588,15 +584,16 @@ const Student = {
            parent_mobile = COALESCE($9, parent_mobile),
            parent_email = COALESCE($10, parent_email),
            grade = COALESCE($11, grade),
-           academic_history = COALESCE($12, academic_history)
-       WHERE id = $13
+           academic_history = COALESCE($12, academic_history),
+           admission_no = COALESCE($13, admission_no)
+       WHERE id = $14
        RETURNING *`,
       [
         data.firstName || data.first_name,
         data.lastName || data.last_name,
         data.className || data.class_name,
         data.section,
-        data.rollNumber !== undefined ? Number(data.rollNumber) : undefined,
+        data.rollNumber !== undefined && data.rollNumber !== '' && data.rollNumber !== null ? Number(data.rollNumber) : undefined,
         data.academicYear || data.academic_year,
         data.status,
         data.parentName || data.parent_name,
@@ -604,6 +601,7 @@ const Student = {
         data.parentEmail || data.parent_email,
         data.grade,
         data.academicHistory ? JSON.stringify(data.academicHistory) : undefined,
+        data.admissionNo || data.admission_no,
         id
       ]
     );

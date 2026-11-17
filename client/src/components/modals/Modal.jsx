@@ -111,6 +111,29 @@ export function Modal({
             ? { ...form, id: teacherItem?.id || form.id }
             : form;
 
+    if (type === 'student') {
+      if (!String(normalized.firstName || '').trim()) {
+        alert('Please enter student first name.');
+        return;
+      }
+      if (!String(normalized.lastName || '').trim()) {
+        alert('Please enter student last name.');
+        return;
+      }
+      if (!String(normalized.admissionNo || '').trim()) {
+        alert('Please enter admission number.');
+        return;
+      }
+      if (!String(normalized.className || '').trim()) {
+        alert('Please enter class name.');
+        return;
+      }
+      if (!String(normalized.parentMobile || '').trim()) {
+        alert('Please enter parent mobile number.');
+        return;
+      }
+    }
+
     if (type === 'attendance' && (!normalized.studentId || !normalized.date)) {
       alert('Please choose a student and a date before saving attendance.');
       return;
@@ -136,20 +159,24 @@ export function Modal({
         {type === 'student' ? (
           <>
             <div className="form-row">
-              <Field label="Admission number" value={form.admissionNo || ''} onChange={(v) => set('admissionNo', v)} />
-              <Field label="Roll number" type="number" value={form.rollNumber ?? ''} onChange={(v) => set('rollNumber', v)} />
+              <Field label="First name" placeholder="First name" value={form.firstName || ''} onChange={(v) => set('firstName', v)} required={true} />
+              <Field label="Last name" placeholder="Last name" value={form.lastName || ''} onChange={(v) => set('lastName', v)} required={true} />
             </div>
             <div className="form-row">
-              <Field label="Class" placeholder="10" value={form.className || ''} onChange={(v) => set('className', v)} />
-              <Field label="Section" placeholder="A" value={form.section || ''} onChange={(v) => set('section', v)} />
+              <Field label="Admission number" placeholder="e.g. STU-2024-001" value={form.admissionNo || ''} onChange={(v) => set('admissionNo', v)} required={true} />
+              <Field label="Roll number" type="number" placeholder="Roll number" value={form.rollNumber ?? ''} onChange={(v) => set('rollNumber', v)} required={false} />
             </div>
             <div className="form-row">
-              <Field label="Email" type="email" value={form.email || ''} onChange={(v) => set('email', v)} required={false} />
-              <Field label="Parent name" value={form.parentName || ''} onChange={(v) => set('parentName', v)} required={false} />
+              <Field label="Class" placeholder="10" value={form.className || ''} onChange={(v) => set('className', v)} required={true} />
+              <Field label="Section" placeholder="A" value={form.section || ''} onChange={(v) => set('section', v)} required={false} />
             </div>
             <div className="form-row">
-              <Field label="Parent mobile number" type="tel" value={form.parentMobile || ''} onChange={(v) => set('parentMobile', v)} required={true} />
-              <Field label="Parent email ID" type="email" value={form.parentEmail || ''} onChange={(v) => set('parentEmail', v)} required={false} />
+              <Field label="Email" type="email" placeholder="student@example.com" value={form.email || ''} onChange={(v) => set('email', v)} required={false} />
+              <Field label="Parent name" placeholder="Parent / Guardian name" value={form.parentName || ''} onChange={(v) => set('parentName', v)} required={false} />
+            </div>
+            <div className="form-row">
+              <Field label="Parent mobile number" type="tel" placeholder="10-digit mobile number" value={form.parentMobile || ''} onChange={(v) => set('parentMobile', v)} required={true} />
+              <Field label="Parent email ID" type="email" placeholder="parent@example.com" value={form.parentEmail || ''} onChange={(v) => set('parentEmail', v)} required={false} />
             </div>
             <div className="form-row">
               <Field label="Academic Year" placeholder="2024-2025" value={form.academicYear || ''} onChange={(v) => set('academicYear', v)} required={false} />
