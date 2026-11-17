@@ -64,15 +64,46 @@ const hashOtp = (email, purpose, code) =>
   crypto.createHash('sha256').update(`${email}:${purpose}:${code}:${process.env.OTP_SECRET || 'sharada-school-otp'}`).digest('hex');
 
 const sendOtp = async (email, code, purpose) => {
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    throw new Error('SMTP is not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_FROM.');
-  }
   const subject = purpose === 'registration' ? 'Verify your Sharada School teacher account' : 'Reset your Sharada School password';
+  const text = `Your Sharada School verification code is ${code}. It expires in 10 minutes. If you did not request this, ignore this email.`;
+
+  // 1. If RESEND_API_KEY is configured, send via HTTPS REST API (Port 443).
+  // This works on Render Free Tier without SMTP credentials or open SMTP ports.
+  if (process.env.RESEND_API_KEY) {
+    const fromAddress = process.env.SMTP_FROM || 'Sharada School <onboarding@resend.dev>';
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromAddress,
+        to: email,
+        subject,
+        text
+      })
+    });
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error(`❌ [Resend] Failed to send email to ${email} (${res.status}):`, errBody);
+      throw new Error(`Resend API HTTP error (${res.status}): ${errBody}`);
+    }
+    const data = await res.json().catch(() => ({}));
+    console.log(`✉️ [Resend] Email sent successfully to ${email}. ID: ${data?.id || 'OK'}`);
+    return;
+  }
+
+  // 2. Otherwise use SMTP mailTransport (requires SMTP environment variables)
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    throw new Error('Email service is not configured. Please set RESEND_API_KEY (recommended) or set SMTP_HOST, SMTP_USER, and SMTP_PASS in environment variables.');
+  }
+
   await mailTransport.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: email,
     subject,
-    text: `Your Sharada School verification code is ${code}. It expires in 10 minutes. If you did not request this, ignore this email.`
+    text
   });
 };
 
