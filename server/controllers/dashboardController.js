@@ -37,8 +37,8 @@ const getDashboard = async (_, res) => {
     if (item.status === 'Half Day') return total + 0.5;
     return total;
   }, 0);
-  const attendancePercent = attendance.length ? Math.round((present / attendance.length) * 100) : 96;
-  const average = marks.length ? Math.round(marks.reduce((sum, item) => sum + ((item.score / (item.maxScore || 100)) * 100), 0) / marks.length) : 84;
+  const attendancePercent = attendance.length ? Math.round((present / attendance.length) * 100) : 0;
+  const average = marks.length ? Math.round(marks.reduce((sum, item) => sum + ((item.score / (item.maxScore || 100)) * 100), 0) / marks.length) : 0;
 
   res.json({
     students: serializedStudents,

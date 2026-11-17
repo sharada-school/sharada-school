@@ -290,15 +290,38 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      {mobileMenuOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <aside className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
         <div className="brand">
           <img className="brand-logo" src={`${import.meta.env.BASE_URL}logo.svg`} alt="Sharada School logo" />
           <span>Sharada <b>School</b></span>
+          <button
+            type="button"
+            className="mobile-sidebar-close icon-button"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close navigation"
+          >
+            <X size={20} />
+          </button>
         </div>
         <div className="school-year">ADMINISTRATION <span>{currentAcademicYear}</span></div>
         <nav>
           {[['overview', 'Overview', BarChart3], ['students', 'Students', Users], ['attendance', 'Attendance', CalendarCheck2], ['marks', 'Marks & Results', BookOpen], ['teachers', 'Teachers', ShieldCheck], ['logs', 'Audit Logs', ClipboardList]].filter(([id]) => user.role === 'admin' || !['students', 'teachers', 'logs'].includes(id)).map(([id, label, Icon]) => (
-            <button key={id} className={view === id ? 'active' : ''} onClick={() => { setView(id); setSelected(null); }}>
+            <button
+              key={id}
+              className={view === id ? 'active' : ''}
+              onClick={() => {
+                setView(id);
+                setSelected(null);
+                setMobileMenuOpen(false);
+              }}
+            >
               <Icon size={18} />
               {label}
               {id === 'students' && <span className="nav-count">{students.length}</span>}
@@ -310,13 +333,30 @@ export function App() {
           <div>
             <strong>{user.name}</strong>
           </div>
-          <button className="icon-button" title="Log out" onClick={handleLogout}><LogOut size={16} /></button>
+          <button
+            className="icon-button"
+            title="Log out"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              handleLogout();
+            }}
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </aside>
 
       <main className="main">
         <header>
-          <button className="mobile-menu icon-button"><Menu size={20} /></button>
+          <button
+            type="button"
+            className="mobile-menu icon-button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
           <div className="breadcrumb">
             Sharada School <ChevronRight size={14} /> <span>{selected ? `${selected.firstName} ${selected.lastName}` : view === 'overview' ? 'Overview' : view[0].toUpperCase() + view.slice(1)}</span>
           </div>
@@ -337,13 +377,20 @@ export function App() {
         {selected ? (
           <StudentDetailView
             student={selected}
-            onBack={() => { setSelected(null); setView('students'); }}
+            onBack={() => { setSelected(null); setView('students'); setMobileMenuOpen(false); }}
             onEditStudent={(student) => setModal({ type: 'student', record: student })}
             onPromoteStudent={(student) => setModal({ type: 'promote', mode: 'student', student })}
             isAdmin={user.role === 'admin'}
+            attendanceRecords={attendanceRecords}
           />
         ) : view === 'overview' ? (
-          <OverviewView students={students} teachers={teachers} onStudent={openStudent} setView={setView} />
+          <OverviewView
+            students={students}
+            teachers={teachers}
+            attendanceRecords={attendanceRecords}
+            onStudent={openStudent}
+            setView={(targetView) => { setView(targetView); setMobileMenuOpen(false); }}
+          />
         ) : view === 'students' ? (
           <StudentsView
             students={filtered}

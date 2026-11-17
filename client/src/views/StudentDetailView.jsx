@@ -4,7 +4,7 @@ import Stat from '../components/common/Stat';
 import { getStudentMarks, getClassLabel } from '../utils/formatters';
 import { getConvertedMark, getRegisterGrade } from '../utils/grading';
 
-export function StudentDetailView({ student, onBack, onEditStudent, onPromoteStudent, isAdmin }) {
+export function StudentDetailView({ student, onBack, onEditStudent, onPromoteStudent, isAdmin, attendanceRecords = [] }) {
   const allStudentMarks = getStudentMarks(student);
   const currentStudentYear = student.academicYear || '2024-2025';
   const historyYears = (student.academicHistory || []).map((h) => h.academicYear).filter(Boolean);
@@ -47,6 +47,25 @@ export function StudentDetailView({ student, onBack, onEditStudent, onPromoteStu
     const finalGrade = getRegisterGrade(Math.round((finalScore / 100) * 100), 100, effectiveClass);
     return { subject, ...values, finalScore, finalGrade };
   });
+
+  const studentAttendance = (attendanceRecords || []).filter((entry) => {
+    const sid = entry.studentId?.id || entry.studentId?._id || entry.studentId;
+    return sid && String(sid) === String(student.id || student._id);
+  });
+
+  let studentAttendanceValue = '0%';
+  let studentAttendanceTrend = 'No records yet';
+
+  if (studentAttendance.length > 0) {
+    const present = studentAttendance.reduce((tot, r) => {
+      if (r.status === 'Present') return tot + 1;
+      if (r.status === 'Half Day') return tot + 0.5;
+      return tot;
+    }, 0);
+    const pct = Math.round((present / studentAttendance.length) * 100);
+    studentAttendanceValue = `${pct}%`;
+    studentAttendanceTrend = pct >= 90 ? 'Excellent' : pct >= 75 ? 'Good' : 'Needs attention';
+  }
 
   return (
     <div className="content">
@@ -106,7 +125,7 @@ export function StudentDetailView({ student, onBack, onEditStudent, onPromoteStu
       </div>
 
       <div className="detail-stats">
-        <Stat label="Attendance" value="98%" trend="Excellent" icon={CalendarCheck2} tone="blue" />
+        <Stat label="Attendance" value={studentAttendanceValue} trend={studentAttendanceTrend} icon={CalendarCheck2} tone="blue" />
         <Stat label="Average mark" value={`${average}%`} trend={studentMarks.length ? 'Calculated' : 'No marks yet'} icon={BarChart3} tone="yellow" />
         <Stat label="Subjects enrolled" value={new Set(studentMarks.map((mark) => mark.subject).filter(Boolean)).size.toString().padStart(2, '0')} trend={selectedYear} icon={BookOpen} tone="coral" />
       </div>
