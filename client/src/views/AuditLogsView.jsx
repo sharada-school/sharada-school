@@ -16,7 +16,7 @@ export function AuditLogsView({ logs }) {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Action</th><th>Tab</th><th>Who updated it</th><th>Record ID</th><th>Values</th><th>Date and time</th></tr>
+              <tr><th>Action</th><th>Tab</th><th>Who updated it</th><th>Values</th><th>Date and time</th></tr>
             </thead>
             <tbody>
               {logs.map((log) => (
@@ -24,7 +24,6 @@ export function AuditLogsView({ logs }) {
                   <td><span className="status-pill">{log.action}</span></td>
                   <td>{log.entity}</td>
                   <td>{log.actorName ? `${log.actorName} · ${log.actorEmail} (${log.actorRole})` : 'Not available for older log'}</td>
-                  <td>{log.recordId}</td>
                   <td><pre className="audit-values">{getAuditValueText(log.values) || 'No values recorded'}</pre></td>
                   <td>{log.createdAt ? new Date(log.createdAt).toLocaleString() : '-'}</td>
                 </tr>
