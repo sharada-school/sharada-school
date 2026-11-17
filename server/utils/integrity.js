@@ -1,5 +1,6 @@
 const { User, Student, Teacher, Mark, Attendance, pool } = require('../db');
 const { getPreviousClass, getMarkRule } = require('./helpers');
+const { hashPassword } = require('./passwords');
 
 const ensureDefaultAdmin = async () => {
   try {
@@ -14,26 +15,31 @@ const ensureDefaultAdmin = async () => {
       `).catch(() => {});
     }
 
-    // 2. Fetch existing admin or create/update with default admin credentials
-    let existing = await User.findOne({ email: 'admin@sharada.edu' });
+    // 2. Verify admin exists without overwriting existing passwords
+    const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || 'admin@sharada.edu').toLowerCase().trim();
+    let existing = await User.findOne({ email: adminEmail });
     if (!existing) {
       if (!process.env.ADMIN_INITIAL_PASSWORD) {
-        console.warn('ADMIN_INITIAL_PASSWORD is not set; the initial admin account was not created.');
+        console.log(`ℹ️ Admin account "${adminEmail}" does not exist and ADMIN_INITIAL_PASSWORD is not set. Skipping auto-creation.`);
         return;
       }
+      const hashedPassword = await hashPassword(process.env.ADMIN_INITIAL_PASSWORD);
       await User.create({
-        email: 'admin@sharada.edu',
-        password: process.env.ADMIN_INITIAL_PASSWORD,
+        email: adminEmail,
+        password: hashedPassword,
         name: 'School Admin',
         role: 'admin'
       });
-      console.log('✅ Created initial admin account from ADMIN_INITIAL_PASSWORD.');
+      console.log(`✅ Provisioned initial admin account (${adminEmail}) from environment configuration.`);
     } else {
-      await User.updateOne(
-        { id: existing.id },
-        { role: 'admin', name: existing.name || 'School Admin' }
-      );
-      console.log('✅ Verified admin account role.');
+      // Preserve existing user password - only ensure role is admin
+      if (existing.role !== 'admin') {
+        await User.updateOne(
+          { id: existing.id },
+          { role: 'admin', name: existing.name || 'School Admin' }
+        );
+        console.log(`✅ Verified admin role for ${adminEmail}.`);
+      }
     }
   } catch (err) {
     console.error('Error ensuring default admin:', err.message);

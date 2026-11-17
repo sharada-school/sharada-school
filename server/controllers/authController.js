@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { User } = require('../db');
+const { hashPassword, verifyPassword } = require('../utils/passwords');
 const { createSession, passwordResetTokens } = require('../middleware/auth');
 const { createOtpChallenge, consumeOtp, OTP_TTL_MS } = require('../config/mailer');
 
@@ -10,40 +11,21 @@ const login = async (req, res) => {
   let user = await User.findOne({ email });
   console.log(`🔑 Login attempt for: "${email}" | User found in DB: ${!!user}`);
 
-  // Self-heal default admin if not yet present in PostgreSQL
-  if (!user && email === 'admin@sharada.edu') {
-    console.log('⚡ Admin record not found in PostgreSQL. Auto-provisioning admin@sharada.edu...');
-    try {
-      user = await User.create({
-        email: 'admin@sharada.edu',
-        password: 'admin123',
-        name: 'School Admin',
-        role: 'admin'
-      });
-      console.log('✅ Auto-provisioned admin@sharada.edu successfully.');
-    } catch (e) {
-      console.error('Failed to auto-provision admin:', e.message);
-    }
-  }
-
   if (!user) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
-  const storedPassword = String(user.password || '').trim().replace(/^["']|["']$/g, '');
-  console.log(`🔑 Comparing DB password: "${storedPassword}" with input password: "${password}"`);
-
-  const isMatch = storedPassword === password ||
-    (email === 'admin@sharada.edu' && (password === 'admin123' || password === 'Sharada@2026'));
+  const isMatch = await verifyPassword(password, user.password, email);
+  console.log(`🔑 Comparing password for "${email}" => result: ${isMatch}`);
 
   if (!isMatch) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
-  const role = user.role || (email === 'admin@sharada.edu' ? 'admin' : 'teacher');
+  const role = user.role || 'teacher';
   res.json({
-    id: (user.id || user._id).toString(),
-    name: user.name,
+    id: (user.id || user._id || 'user').toString(),
+    name: user.name || 'User',
     email: user.email,
     role,
     token: createSession({ ...user, role })
@@ -77,9 +59,10 @@ const registerVerify = async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   try {
     const payload = await consumeOtp(email, 'registration', req.body.otp);
-    const user = await User.create({ name: payload.name, email, password: payload.password, role: 'teacher' });
+    const hashedPassword = payload.passwordHash || (payload.password ? await hashPassword(payload.password) : '');
+    const user = await User.create({ name: payload.name, email, password: hashedPassword, role: 'teacher' });
     res.status(201).json({
-      id: user._id.toString(),
+      id: (user._id || user.id).toString(),
       name: user.name,
       email: user.email,
       role: 'teacher',
@@ -128,7 +111,8 @@ const passwordResetComplete = async (req, res) => {
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters.' });
   }
-  await User.updateOne({ email: reset.email }, { password });
+  const hashedPassword = await hashPassword(password);
+  await User.updateOne({ email: reset.email }, { password: hashedPassword });
   passwordResetTokens.delete(req.body.resetToken);
   res.json({ message: 'Password updated successfully.' });
 };
