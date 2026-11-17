@@ -395,10 +395,14 @@ const Teacher = {
     });
   },
 
-  async findById(id) {
-    if (!id) return null;
-    const res = await pool.query('SELECT * FROM public.teachers WHERE id = $1 LIMIT 1', [id]);
-    return res.rows[0] ? toCamelCase(res.rows[0]) : null;
+  findById(id) {
+    return new QueryPromise(async () => {
+      if (!id) return null;
+      const strId = String(id).trim();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(strId)) return null;
+      const res = await pool.query('SELECT * FROM public.teachers WHERE id = $1 LIMIT 1', [strId]);
+      return res.rows[0] ? toCamelCase(res.rows[0]) : null;
+    });
   },
 
   async create(data) {
@@ -532,10 +536,14 @@ const Student = {
     });
   },
 
-  async findById(id) {
-    if (!id) return null;
-    const res = await pool.query('SELECT * FROM public.students WHERE id = $1 LIMIT 1', [id]);
-    return res.rows[0] ? toCamelCase(res.rows[0]) : null;
+  findById(id) {
+    return new QueryPromise(async () => {
+      if (!id) return null;
+      const strId = String(id).trim();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(strId)) return null;
+      const res = await pool.query('SELECT * FROM public.students WHERE id = $1 LIMIT 1', [strId]);
+      return res.rows[0] ? toCamelCase(res.rows[0]) : null;
+    });
   },
 
   async create(data) {
@@ -899,6 +907,20 @@ const Mark = {
         score, max_score, oral_score, converted_score, converted_max_score,
         exam_type, grade
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ON CONFLICT (student_id, academic_year, exam_type, subject)
+      DO UPDATE SET
+        class_teacher_id = EXCLUDED.class_teacher_id,
+        subject_teacher_id = EXCLUDED.subject_teacher_id,
+        teacher_id = EXCLUDED.teacher_id,
+        class_name = EXCLUDED.class_name,
+        part = EXCLUDED.part,
+        lecture_name = EXCLUDED.lecture_name,
+        score = EXCLUDED.score,
+        max_score = EXCLUDED.max_score,
+        oral_score = EXCLUDED.oral_score,
+        converted_score = EXCLUDED.converted_score,
+        converted_max_score = EXCLUDED.converted_max_score,
+        grade = EXCLUDED.grade
       RETURNING *`,
       [
         data.studentId,

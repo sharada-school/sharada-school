@@ -86,7 +86,7 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
               type="text"
               value={targetYear}
               onChange={(e) => setTargetYear(e.target.value)}
-              placeholder="e.g. 2025-2026"
+              placeholder="Academic Year"
               required
             />
           </label>

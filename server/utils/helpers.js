@@ -1,10 +1,20 @@
 const { normalizeDocument } = require('../db');
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (val) => typeof val === 'string' && UUID_REGEX.test(val.trim());
+
 const toObjectId = (value) => {
   if (!value) return null;
-  if (typeof value === 'object' && value.id) return String(value.id);
-  if (typeof value === 'object' && value._id) return String(value._id);
-  return String(value).trim();
+  if (typeof value === 'object' && value.id) {
+    const idStr = String(value.id).trim();
+    return isUuid(idStr) ? idStr : null;
+  }
+  if (typeof value === 'object' && value._id) {
+    const idStr = String(value._id).trim();
+    return isUuid(idStr) ? idStr : null;
+  }
+  const str = String(value).trim();
+  return isUuid(str) ? str : null;
 };
 
 const serialize = (doc) => normalizeDocument(doc);
