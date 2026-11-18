@@ -1,6 +1,6 @@
 import React from 'react';
 import { Search, GraduationCap, ChevronRight } from 'lucide-react';
-import { getClassLabel, getStudentAverage } from '../utils/formatters';
+import { getClassLabel, getStudentAverage, getStudentName } from '../utils/formatters';
 
 export function StudentsView({
   students,

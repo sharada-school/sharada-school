@@ -353,7 +353,7 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
               >
                 <option value="">All Sections</option>
                 {sectionsList.map((sec) => (
-                  <option value={sec} key={sec}>Section {sec}</option>
+                  <option value={sec} key={sec}>{sec}</option>
                 ))}
               </select>
             </label>
@@ -422,7 +422,7 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
                 <option value="">No Section</option>
                 {sectionsList.map((sec) => (
                   <option value={sec} key={sec}>
-                    Section {sec}
+                    {sec}
                   </option>
                 ))}
               </select>
@@ -430,8 +430,26 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
           </div>
         </div>
 
-        {/* STEP 4: STUDENT CHECKLIST TABLE */}
-        <div style={{ marginBottom: '16px' }}>
+        {/* Search input */}
+        <label style={{ display: 'grid', gap: '5px', fontWeight: 600, color: 'var(--ink)' }}>
+          <span>Search Students</span>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search name, roll or admission..."
+              style={{ paddingLeft: '34px' }}
+            />
+            <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
+          </div>
+        </label>
+    </div>
+        </div >
+
+    {/* STEP 3: STUDENT CHECKLIST TABLE */ }
+    < div style = {{ marginBottom: '16px' }
+}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, margin: 0 }}>
@@ -542,18 +560,18 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
               </table>
             )}
           </div>
-        </div>
+        </div >
 
-        {/* REASSURANCE NOTICE */}
-        <div style={{ padding: '10px 14px', background: '#eef3f7', borderRadius: '10px', fontSize: '12px', color: '#102d77', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+  {/* REASSURANCE NOTICE */ }
+  < div style = {{ padding: '10px 14px', background: '#eef3f7', borderRadius: '10px', fontSize: '12px', color: '#102d77', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
           <CheckCircle2 size={18} color="#1237ac" style={{ flexShrink: 0 }} />
           <span>
             New academic history records will be created with the manually selected class and section. Previous academic records and marks remain permanently archived as "Promoted".
           </span>
-        </div>
+        </div >
 
-        {/* MODAL ACTIONS */}
-        <div className="modal-actions" style={{ margin: 0 }}>
+  {/* MODAL ACTIONS */ }
+  < div className = "modal-actions" style = {{ margin: 0 }}>
           <button type="button" className="outline-button" onClick={onClose} disabled={loading}>
             Cancel
           </button>
@@ -572,9 +590,9 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
                   ? `Promote All ${selectedIds.size} to ${finalTargetClass}`
                   : `Promote ${selectedIds.size} Student(s) to ${finalTargetClass}`}
           </button>
-        </div>
-      </form>
-    </div>
+        </div >
+      </form >
+    </div >
   );
 }
 

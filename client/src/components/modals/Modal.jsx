@@ -308,7 +308,7 @@ export function Modal({
                 >
                   <option value="">No Section</option>
                   {sectionOptions.map((sec) => (
-                    <option value={sec} key={sec}>Section {sec}</option>
+                    <option value={sec} key={sec}>{sec}</option>
                   ))}
                 </select>
               </label>
