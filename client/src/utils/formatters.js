@@ -10,12 +10,19 @@ export const attendanceOptions = [
 
 export const getClassLabel = (student) => {
   if (!student) return '';
-  if (student.section) return `${student.className || ''} ${student.section}`.trim();
-  return student.className || '';
+  const cls = student.class || student.className || '';
+  if (student.section) return `${cls} ${student.section}`.trim();
+  return cls;
 };
 
-export const getStudentName = (student) =>
-  `${student ? `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Unknown student' : 'Unknown student'}`;
+export const getStudentName = (student) => {
+  if (!student) return 'Unknown student';
+  if (student.studentName && typeof student.studentName === 'string' && student.studentName.trim()) {
+    return student.studentName.trim();
+  }
+  const full = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+  return full || 'Unknown student';
+};
 
 export const getStudentOptionLabel = (student) => {
   if (!student) return 'Select student';

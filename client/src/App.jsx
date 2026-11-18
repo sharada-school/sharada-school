@@ -194,11 +194,21 @@ export function App() {
 
       if (type === 'students') {
         setStudents((prev) => {
-          const next = [created, ...prev.filter((student) => student.id !== created.id)];
+          const next = [created, ...prev.filter((student) => (student.id || student._id) !== (created.id || created._id))];
           return next;
         });
-        if (selected && selected.id === created.id) {
-          setSelected({ ...selected, ...created, marks: selected.marks || [] });
+        if (selected && ((selected.id || selected._id) === (created.id || created._id))) {
+          try {
+            const freshRes = await apiFetch(`/api/students/${created.id || created._id}`, {}, user);
+            if (freshRes.ok) {
+              const freshData = await freshRes.json();
+              setSelected(freshData);
+            } else {
+              setSelected({ ...selected, ...created, marks: selected.marks || [] });
+            }
+          } catch {
+            setSelected({ ...selected, ...created, marks: selected.marks || [] });
+          }
         }
       }
 
@@ -296,7 +306,7 @@ export function App() {
           setSelected(updated);
         }
       }
-      setNotice(`Successfully promoted ${result.promotedCount || 0} student(s) to ${result.targetYear}!`);
+      setNotice(result.message || `Successfully promoted ${result.promotedCount || 0} student(s) to ${result.targetClass || result.targetYear}!`);
     } catch (error) {
       setNotice(error.message || 'Promotion failed. Please try again.');
     }

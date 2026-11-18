@@ -52,24 +52,35 @@ export function StudentsView({
             </tr>
           </thead>
           <tbody>
-            {students.map((s, i) => (
-              <tr key={s.id} onClick={() => onStudent(s)}>
-                <td>
-                  <div className="person">
-                    <span className={`student-avatar a${i}`}>{s.firstName[0]}{s.lastName[0]}</span>
-                    <div><strong>{s.firstName} {s.lastName}</strong><small>Roll no. {s.rollNumber}</small></div>
-                  </div>
-                </td>
-                <td>{s.admissionNo}</td>
-                <td>{getClassLabel(s)}</td>
-                <td>{s.email}</td>
-                <td>
-                  <div className="mini-progress"><span style={{ width: `${getStudentAverage(s)}%` }}></span></div>
-                  <small>{getStudentAverage(s)}% avg.</small>
-                </td>
-                <td><ChevronRight size={16} className="muted" /></td>
-              </tr>
-            ))}
+            {students.map((s, i) => {
+              const name = getStudentName(s);
+              const initials = name
+                .split(' ')
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((part) => part[0])
+                .join('')
+                .toUpperCase() || 'ST';
+
+              return (
+                <tr key={s.id || s._id} onClick={() => onStudent(s)}>
+                  <td>
+                    <div className="person">
+                      <span className={`student-avatar a${i % 6}`}>{initials}</span>
+                      <div><strong>{name}</strong><small>Roll no. {s.rollNumber || '—'}</small></div>
+                    </div>
+                  </td>
+                  <td>{s.admissionNumber || s.admissionNo}</td>
+                  <td>{getClassLabel(s)}</td>
+                  <td>{s.parentMobile ? `+91 ${s.parentMobile.slice(-10)}` : (s.email || '—')}</td>
+                  <td>
+                    <div className="mini-progress"><span style={{ width: `${getStudentAverage(s)}%` }}></span></div>
+                    <small>{getStudentAverage(s)}% avg.</small>
+                  </td>
+                  <td><ChevronRight size={16} className="muted" /></td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

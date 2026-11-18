@@ -35,14 +35,20 @@ export function Modal({
     if (type === 'student') {
       return {
         id: editingItem.id,
-        admissionNo: editingItem.admissionNo || '',
+        admissionNo: editingItem.admissionNumber || editingItem.admissionNo || '',
+        admissionNumber: editingItem.admissionNumber || editingItem.admissionNo || '',
+        studentName: editingItem.studentName || '',
         firstName: editingItem.firstName || '',
         lastName: editingItem.lastName || '',
-        className: editingItem.className || '',
+        dateOfBirth: editingItem.dateOfBirth ? String(editingItem.dateOfBirth).slice(0, 10) : '',
+        fatherName: editingItem.fatherName || editingItem.parentName || '',
+        motherName: editingItem.motherName || '',
+        address: editingItem.address || '',
+        className: editingItem.class || editingItem.className || '',
         section: editingItem.section || '',
         rollNumber: editingItem.rollNumber ?? '',
         email: editingItem.email || '',
-        parentName: editingItem.parentName || '',
+        parentName: editingItem.parentName || editingItem.fatherName || '',
         parentMobile: editingItem.parentMobile || '',
         parentEmail: editingItem.parentEmail || '',
         academicYear: editingItem.academicYear || '',
@@ -101,7 +107,28 @@ export function Modal({
     const normalized = type === 'student'
       ? (() => {
           const { grade: _ignoredGrade, ...rest } = form;
-          return { ...rest, id: studentItem?.id || form.id, className: form.className || '', section: form.section || '' };
+          const fName = String(form.firstName || '').trim();
+          const lName = String(form.lastName || '').trim();
+          const sName = form.studentName ? String(form.studentName).trim() : `${fName} ${lName}`.trim();
+          const adm = String(form.admissionNumber || form.admissionNo || '').trim();
+          return {
+            ...rest,
+            id: studentItem?.id || form.id,
+            firstName: fName,
+            lastName: lName,
+            studentName: sName,
+            admissionNo: adm,
+            admissionNumber: adm,
+            className: form.className || '',
+            class: form.className || '',
+            section: form.section || '',
+            dateOfBirth: form.dateOfBirth || null,
+            fatherName: form.fatherName || form.parentName || '',
+            motherName: form.motherName || '',
+            address: form.address || '',
+            parentMobile: form.parentMobile || '',
+            parentName: form.parentName || form.fatherName || ''
+          };
         })()
       : type === 'mark'
         ? { ...form, id: markItem?.id || form.id }
@@ -173,28 +200,41 @@ export function Modal({
 
         {type === 'student' ? (
           <>
+            <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
+              1. Student Personal Information
+            </div>
             <div className="form-row">
               <Field label="First name" placeholder="First name" value={form.firstName || ''} onChange={(v) => set('firstName', v)} required={true} />
               <Field label="Last name" placeholder="Last name" value={form.lastName || ''} onChange={(v) => set('lastName', v)} required={true} />
             </div>
             <div className="form-row">
-              <Field label="Admission number" placeholder="Admission number" value={form.admissionNo || ''} onChange={(v) => set('admissionNo', v)} required={true} />
-              <Field label="Roll number" type="number" placeholder="Roll number" value={form.rollNumber ?? ''} onChange={(v) => set('rollNumber', v)} required={false} />
+              <Field label="Admission number" placeholder="Admission number" value={form.admissionNo || form.admissionNumber || ''} onChange={(v) => { set('admissionNo', v); set('admissionNumber', v); }} required={true} />
+              <Field label="Date of birth" type="date" placeholder="Date of birth" value={form.dateOfBirth || ''} onChange={(v) => set('dateOfBirth', v)} required={false} />
             </div>
             <div className="form-row">
-              <Field label="Class" placeholder="Class" value={form.className || ''} onChange={(v) => set('className', v)} required={true} />
-              <Field label="Section" placeholder="Section" value={form.section || ''} onChange={(v) => set('section', v)} required={false} />
-            </div>
-            <div className="form-row">
-              <Field label="Email" type="email" placeholder="Email" value={form.email || ''} onChange={(v) => set('email', v)} required={false} />
-              <Field label="Parent name" placeholder="Parent name" value={form.parentName || ''} onChange={(v) => set('parentName', v)} required={false} />
+              <Field label="Father name" placeholder="Father name" value={form.fatherName || ''} onChange={(v) => { set('fatherName', v); set('parentName', v); }} required={false} />
+              <Field label="Mother name" placeholder="Mother name" value={form.motherName || ''} onChange={(v) => set('motherName', v)} required={false} />
             </div>
             <div className="form-row">
               <Field label="Parent mobile number" type="tel" placeholder="Parent mobile number" value={form.parentMobile || ''} onChange={(v) => set('parentMobile', v)} required={true} />
               <Field label="Parent email ID" type="email" placeholder="Parent email ID" value={form.parentEmail || ''} onChange={(v) => set('parentEmail', v)} required={false} />
             </div>
             <div className="form-row">
+              <Field label="Address" placeholder="Address" value={form.address || ''} onChange={(v) => set('address', v)} required={false} />
+            </div>
+
+            <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--muted)', textTransform: 'uppercase', marginTop: '16px', marginBottom: '8px' }}>
+              2. Academic Information
+            </div>
+            <div className="form-row">
               <Field label="Academic Year" placeholder="Academic Year" value={form.academicYear || ''} onChange={(v) => set('academicYear', v)} required={false} />
+              <Field label="Class" placeholder="Class" value={form.className || ''} onChange={(v) => set('className', v)} required={true} />
+            </div>
+            <div className="form-row">
+              <Field label="Section" placeholder="Section" value={form.section || ''} onChange={(v) => set('section', v)} required={false} />
+              <Field label="Roll number" type="number" placeholder="Roll number" value={form.rollNumber ?? ''} onChange={(v) => set('rollNumber', v)} required={false} />
+            </div>
+            <div className="form-row">
               <label>
                 Status
                 <select value={form.status || 'Active'} onChange={(e) => set('status', e.target.value)}>

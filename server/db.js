@@ -57,6 +57,15 @@ const toCamelCase = (row) => {
   if (result.id && !result._id) {
     result._id = result.id;
   }
+  if (!result.admissionNumber && result.admissionNo) {
+    result.admissionNumber = result.admissionNo;
+  }
+  if (!result.admissionNo && result.admissionNumber) {
+    result.admissionNo = result.admissionNumber;
+  }
+  if (!result.studentName) {
+    result.studentName = `${result.firstName || ''} ${result.lastName || ''}`.trim();
+  }
   return result;
 };
 
@@ -145,8 +154,14 @@ const initTables = async () => {
       CREATE TABLE IF NOT EXISTS public.students (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         admission_no VARCHAR(100) UNIQUE NOT NULL,
+        admission_number VARCHAR(100),
         first_name VARCHAR(100) NOT NULL,
         last_name VARCHAR(100) NOT NULL,
+        student_name VARCHAR(255),
+        date_of_birth DATE,
+        father_name VARCHAR(255),
+        mother_name VARCHAR(255),
+        address TEXT,
         email VARCHAR(255),
         phone VARCHAR(50),
         parent_name VARCHAR(255),
@@ -162,9 +177,33 @@ const initTables = async () => {
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS public.student_academic_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+        academic_year VARCHAR(50) NOT NULL,
+        class VARCHAR(100) NOT NULL,
+        section VARCHAR(50) DEFAULT '',
+        roll_number VARCHAR(50) DEFAULT '',
+        status VARCHAR(50) NOT NULL DEFAULT 'Active',
+        promoted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_student_academic_year UNIQUE (student_id, academic_year)
+      );
+
+      -- Ensure existing student tables have the personal profile columns
+      ALTER TABLE public.students ADD COLUMN IF NOT EXISTS admission_number VARCHAR(100);
+      ALTER TABLE public.students ADD COLUMN IF NOT EXISTS student_name VARCHAR(255);
+      ALTER TABLE public.students ADD COLUMN IF NOT EXISTS date_of_birth DATE;
+      ALTER TABLE public.students ADD COLUMN IF NOT EXISTS father_name VARCHAR(255);
+      ALTER TABLE public.students ADD COLUMN IF NOT EXISTS mother_name VARCHAR(255);
+      ALTER TABLE public.students ADD COLUMN IF NOT EXISTS address TEXT;
+
       CREATE TABLE IF NOT EXISTS public.attendance (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+        academic_record_id UUID REFERENCES public.student_academic_history(id) ON DELETE SET NULL,
+        academic_year VARCHAR(50),
+        class_name VARCHAR(100),
         date DATE NOT NULL,
         status VARCHAR(50) NOT NULL DEFAULT 'Present',
         session_status VARCHAR(50) DEFAULT 'Full Day',
@@ -174,9 +213,14 @@ const initTables = async () => {
         CONSTRAINT uq_attendance_student_date UNIQUE (student_id, date)
       );
 
+      ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS academic_record_id UUID REFERENCES public.student_academic_history(id) ON DELETE SET NULL;
+      ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS academic_year VARCHAR(50);
+      ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS class_name VARCHAR(100);
+
       CREATE TABLE IF NOT EXISTS public.marks (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+        academic_record_id UUID REFERENCES public.student_academic_history(id) ON DELETE SET NULL,
         class_teacher_id UUID REFERENCES public.teachers(id) ON DELETE SET NULL,
         subject_teacher_id UUID REFERENCES public.teachers(id) ON DELETE SET NULL,
         teacher_id UUID REFERENCES public.teachers(id) ON DELETE SET NULL,
@@ -195,6 +239,8 @@ const initTables = async () => {
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT uq_marks_student_subject_exam_year UNIQUE (student_id, subject, exam_type, academic_year)
       );
+
+      ALTER TABLE public.marks ADD COLUMN IF NOT EXISTS academic_record_id UUID REFERENCES public.student_academic_history(id) ON DELETE SET NULL;
 
       CREATE TABLE IF NOT EXISTS public.audit_logs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -223,12 +269,70 @@ const initTables = async () => {
       CREATE INDEX IF NOT EXISTS idx_users_phone ON public.users(phone);
       CREATE INDEX IF NOT EXISTS idx_students_parent_mobile ON public.students(parent_mobile);
       CREATE INDEX IF NOT EXISTS idx_students_class_name ON public.students(class_name);
+      CREATE INDEX IF NOT EXISTS idx_student_academic_history_student_id ON public.student_academic_history(student_id);
+      CREATE INDEX IF NOT EXISTS idx_student_academic_history_year ON public.student_academic_history(academic_year);
       CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON public.attendance(student_id);
+      CREATE INDEX IF NOT EXISTS idx_attendance_academic_record_id ON public.attendance(academic_record_id);
       CREATE INDEX IF NOT EXISTS idx_attendance_date ON public.attendance(date);
       CREATE INDEX IF NOT EXISTS idx_marks_student_id ON public.marks(student_id);
+      CREATE INDEX IF NOT EXISTS idx_marks_academic_record_id ON public.marks(academic_record_id);
       CREATE INDEX IF NOT EXISTS idx_marks_academic_year ON public.marks(academic_year);
       CREATE INDEX IF NOT EXISTS idx_otp_email_purpose ON public.otp_challenges(LOWER(email), purpose);
     `);
+
+    // Safe migration: seed student_name, admission_number and student_academic_history from existing data
+    try {
+      await client.query(`
+        UPDATE public.students
+        SET student_name = TRIM(CONCAT(first_name, ' ', last_name))
+        WHERE student_name IS NULL OR student_name = '';
+
+        UPDATE public.students
+        SET admission_number = admission_no
+        WHERE admission_number IS NULL OR admission_number = '';
+
+        -- Insert active academic records for current students if not already in student_academic_history
+        INSERT INTO public.student_academic_history (student_id, academic_year, class, section, roll_number, status, created_at)
+        SELECT id, COALESCE(academic_year, '2024-2025'), class_name, COALESCE(section, ''), COALESCE(roll_number::text, ''), COALESCE(status, 'Active'), created_at
+        FROM public.students
+        WHERE class_name IS NOT NULL AND class_name != ''
+        ON CONFLICT (student_id, academic_year) DO NOTHING;
+
+        -- Migrate past history entries stored in JSONB academic_history
+        INSERT INTO public.student_academic_history (student_id, academic_year, class, section, roll_number, status, promoted_at)
+        SELECT
+          s.id,
+          elem->>'academicYear',
+          COALESCE(elem->>'class', elem->>'className', s.class_name),
+          COALESCE(elem->>'section', ''),
+          COALESCE(elem->>'rollNumber', ''),
+          COALESCE(elem->>'status', 'Promoted'),
+          CASE WHEN (elem->>'promotedAt') IS NOT NULL THEN (elem->>'promotedAt')::timestamptz ELSE NOW() END
+        FROM public.students s,
+             jsonb_array_elements(CASE WHEN jsonb_typeof(s.academic_history) = 'array' THEN s.academic_history ELSE '[]'::jsonb END) elem
+        WHERE (elem->>'academicYear') IS NOT NULL AND (elem->>'academicYear') != ''
+        ON CONFLICT (student_id, academic_year) DO NOTHING;
+
+        -- Link marks to their academic history record
+        UPDATE public.marks m
+        SET academic_record_id = h.id
+        FROM public.student_academic_history h
+        WHERE m.student_id = h.student_id AND m.academic_year = h.academic_year
+          AND m.academic_record_id IS NULL;
+
+        -- Link attendance to active or matching academic history record
+        UPDATE public.attendance a
+        SET academic_year = h.academic_year,
+            class_name = h.class,
+            academic_record_id = h.id
+        FROM public.student_academic_history h
+        WHERE a.student_id = h.student_id
+          AND a.academic_record_id IS NULL
+          AND (h.status = 'Active' OR h.academic_year = '2024-2025');
+      `);
+    } catch (migErr) {
+      console.warn('⚠️ Minor notice during academic history migration check:', migErr.message);
+    }
     console.log('✅ PostgreSQL tables and indexes initialized successfully.');
   } finally {
     client.release();
@@ -470,7 +574,140 @@ const Teacher = {
   }
 };
 
-// STUDENTS
+// -------------------------------------------------------------
+// STUDENT ACADEMIC HISTORY (Separate Collection / Table)
+// -------------------------------------------------------------
+const StudentAcademicHistory = {
+  find(filter = {}) {
+    return new QueryPromise(async (sort, limit) => {
+      let query = 'SELECT * FROM public.student_academic_history WHERE 1=1';
+      const params = [];
+
+      if (filter.studentId) {
+        params.push(filter.studentId);
+        query += ` AND student_id = $${params.length}`;
+      }
+      if (filter._id?.$in || filter.id?.$in) {
+        const ids = filter._id?.$in || filter.id?.$in;
+        params.push(ids);
+        query += ` AND id = ANY($${params.length})`;
+      }
+      if (filter.academicYear) {
+        params.push(filter.academicYear);
+        query += ` AND academic_year = $${params.length}`;
+      }
+      if (filter.class) {
+        params.push(filter.class);
+        query += ` AND class = $${params.length}`;
+      }
+      if (filter.status) {
+        params.push(filter.status);
+        query += ` AND status = $${params.length}`;
+      }
+
+      if (sort?.academicYear) {
+        query += sort.academicYear === -1 ? ' ORDER BY academic_year DESC' : ' ORDER BY academic_year ASC';
+      } else {
+        query += ' ORDER BY academic_year DESC, created_at DESC';
+      }
+
+      if (limit) {
+        query += ` LIMIT ${parseInt(limit, 10)}`;
+      }
+
+      const res = await pool.query(query, params);
+      return res.rows.map(toCamelCase);
+    });
+  },
+
+  findOne(filter = {}) {
+    return new QueryPromise(async () => {
+      const list = await this.find(filter).limit(1);
+      return list[0] || null;
+    });
+  },
+
+  findById(id) {
+    return new QueryPromise(async () => {
+      if (!id) return null;
+      const strId = String(id).trim();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(strId)) return null;
+      const res = await pool.query('SELECT * FROM public.student_academic_history WHERE id = $1 LIMIT 1', [strId]);
+      return res.rows[0] ? toCamelCase(res.rows[0]) : null;
+    });
+  },
+
+  async create(data) {
+    const studentId = data.studentId || data.student_id;
+    const academicYear = data.academicYear || data.academic_year || '2024-2025';
+    const cls = data.class || data.className || data.class_name || '';
+    const section = data.section || '';
+    const rollNumber = data.rollNumber !== undefined && data.rollNumber !== null ? String(data.rollNumber) : '';
+    const status = data.status || 'Active';
+    const promotedAt = data.promotedAt || data.promoted_at || null;
+
+    const res = await pool.query(
+      `INSERT INTO public.student_academic_history (
+        student_id, academic_year, class, section, roll_number, status, promoted_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (student_id, academic_year) DO UPDATE
+      SET class = EXCLUDED.class,
+          section = EXCLUDED.section,
+          roll_number = EXCLUDED.roll_number,
+          status = EXCLUDED.status,
+          promoted_at = COALESCE(EXCLUDED.promoted_at, student_academic_history.promoted_at)
+      RETURNING *`,
+      [studentId, academicYear, cls, section, rollNumber, status, promotedAt]
+    );
+    return toCamelCase(res.rows[0]);
+  },
+
+  async updateOne(filter = {}, updateData = {}) {
+    const set = updateData.$set || updateData;
+    let target = null;
+    if (filter._id || filter.id) {
+      target = await this.findById(filter._id || filter.id);
+    } else if (filter.studentId && filter.academicYear) {
+      target = await this.findOne({ studentId: filter.studentId, academicYear: filter.academicYear });
+    }
+    if (!target) return null;
+
+    const fields = {
+      class: set.class || set.className,
+      section: set.section,
+      roll_number: set.rollNumber !== undefined ? String(set.rollNumber) : undefined,
+      status: set.status,
+      promoted_at: set.promotedAt || set.promoted_at
+    };
+
+    const updates = [];
+    const params = [];
+    for (const [k, v] of Object.entries(fields)) {
+      if (v !== undefined) {
+        params.push(v);
+        updates.push(`${k} = $${params.length}`);
+      }
+    }
+    if (updates.length > 0) {
+      params.push(target.id);
+      const res = await pool.query(
+        `UPDATE public.student_academic_history SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING *`,
+        params
+      );
+      return res.rows[0] ? toCamelCase(res.rows[0]) : null;
+    }
+    return target;
+  },
+
+  async countDocuments(filter = {}) {
+    const list = await this.find(filter);
+    return list.length;
+  }
+};
+
+// -------------------------------------------------------------
+// STUDENT PROFILE (Personal Information Collection / Table)
+// -------------------------------------------------------------
 const Student = {
   find(filter = {}) {
     return new QueryPromise(async (sort, limit) => {
@@ -532,7 +769,28 @@ const Student = {
       }
 
       const res = await pool.query(query, params);
-      return res.rows.map(toCamelCase);
+      const students = res.rows.map(toCamelCase);
+
+      // Attach full academic history from StudentAcademicHistory
+      if (students.length > 0) {
+        const sIds = students.map((s) => s.id);
+        const histRes = await pool.query(
+          'SELECT * FROM public.student_academic_history WHERE student_id = ANY($1) ORDER BY academic_year DESC, created_at DESC',
+          [sIds]
+        );
+        const histMap = {};
+        for (const h of histRes.rows.map(toCamelCase)) {
+          histMap[h.studentId] = histMap[h.studentId] || [];
+          histMap[h.studentId].push(h);
+        }
+        for (const s of students) {
+          s.academicHistory = (histMap[s.id] && histMap[s.id].length > 0)
+            ? histMap[s.id]
+            : (Array.isArray(s.academicHistory) ? s.academicHistory : []);
+        }
+      }
+
+      return students;
     });
   },
 
@@ -542,64 +800,135 @@ const Student = {
       const strId = String(id).trim();
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(strId)) return null;
       const res = await pool.query('SELECT * FROM public.students WHERE id = $1 LIMIT 1', [strId]);
-      return res.rows[0] ? toCamelCase(res.rows[0]) : null;
+      if (!res.rows[0]) return null;
+      const student = toCamelCase(res.rows[0]);
+
+      const histRes = await pool.query(
+        'SELECT * FROM public.student_academic_history WHERE student_id = $1 ORDER BY academic_year DESC, created_at DESC',
+        [strId]
+      );
+      student.academicHistory = histRes.rows.length > 0
+        ? histRes.rows.map(toCamelCase)
+        : (Array.isArray(student.academicHistory) ? student.academicHistory : []);
+
+      return student;
     });
   },
 
   async create(data) {
+    const admissionNo = data.admissionNumber || data.admissionNo || data.admission_no || '';
+    const rawName = data.studentName || data.student_name || '';
+    let firstName = data.firstName || data.first_name || '';
+    let lastName = data.lastName || data.last_name || '';
+
+    if (!firstName && rawName) {
+      const parts = rawName.trim().split(/\s+/);
+      firstName = parts[0] || 'Student';
+      lastName = parts.slice(1).join(' ') || '.';
+    }
+    const studentName = rawName || `${firstName} ${lastName}`.trim();
+
+    const className = data.className || data.class_name || data.class || '';
+    const section = data.section || '';
+    const rollNumber = data.rollNumber !== undefined && data.rollNumber !== '' && data.rollNumber !== null ? Number(data.rollNumber) : null;
+    const academicYear = data.academicYear || data.academic_year || '2024-2025';
+    const status = data.status || 'Active';
+
     const res = await pool.query(
       `INSERT INTO public.students (
-        admission_no, first_name, last_name, email, phone,
-        parent_name, parent_mobile, parent_email, class_name, section,
-        roll_number, academic_year, status, academic_history, grade
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        admission_no, admission_number, first_name, last_name, student_name,
+        date_of_birth, father_name, mother_name, address,
+        email, phone, parent_name, parent_mobile, parent_email,
+        class_name, section, roll_number, academic_year, status, academic_history, grade
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       RETURNING *`,
       [
-        data.admissionNo || data.admission_no,
-        data.firstName || data.first_name,
-        data.lastName || data.last_name,
+        admissionNo,
+        admissionNo,
+        firstName,
+        lastName,
+        studentName,
+        data.dateOfBirth || data.date_of_birth || null,
+        data.fatherName || data.father_name || '',
+        data.motherName || data.mother_name || '',
+        data.address || '',
         data.email || null,
         data.phone || null,
-        data.parentName || data.parent_name || '',
-        data.parentMobile || data.parent_mobile,
+        data.parentName || data.parent_name || data.fatherName || '',
+        data.parentMobile || data.parent_mobile || '',
         data.parentEmail || data.parent_email || '',
-        data.className || data.class_name,
-        data.section || '',
-        data.rollNumber !== undefined && data.rollNumber !== '' && data.rollNumber !== null ? Number(data.rollNumber) : null,
-        data.academicYear || data.academic_year || '2024-2025',
-        data.status || 'Active',
+        className,
+        section,
+        rollNumber,
+        academicYear,
+        status,
         JSON.stringify(data.academicHistory || data.academic_history || []),
         data.grade || ''
       ]
     );
-    return toCamelCase(res.rows[0]);
+
+    const createdStudent = toCamelCase(res.rows[0]);
+
+    // Automatically create initial Academic History record in separate collection
+    let academicRecord = null;
+    if (className) {
+      academicRecord = await StudentAcademicHistory.create({
+        studentId: createdStudent.id,
+        academicYear,
+        class: className,
+        section,
+        rollNumber: rollNumber !== null ? String(rollNumber) : '',
+        status: status === 'Graduated' ? 'Graduated' : 'Active'
+      });
+    }
+
+    createdStudent.academicHistory = academicRecord ? [academicRecord] : [];
+    return createdStudent;
   },
 
   async findByIdAndUpdate(id, data) {
     const current = await this.findById(id);
     if (!current) return null;
 
+    const rawName = data.studentName || data.student_name;
+    let firstName = data.firstName || data.first_name;
+    let lastName = data.lastName || data.last_name;
+    if (rawName && !firstName) {
+      const parts = rawName.trim().split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.slice(1).join(' ') || '.';
+    }
+    const studentName = rawName || (firstName && lastName ? `${firstName} ${lastName}`.trim() : undefined);
+    const admissionNo = data.admissionNumber || data.admissionNo || data.admission_no;
+
     const res = await pool.query(
       `UPDATE public.students
        SET first_name = COALESCE($1, first_name),
            last_name = COALESCE($2, last_name),
-           class_name = COALESCE($3, class_name),
-           section = COALESCE($4, section),
-           roll_number = COALESCE($5, roll_number),
-           academic_year = COALESCE($6, academic_year),
-           status = COALESCE($7, status),
-           parent_name = COALESCE($8, parent_name),
-           parent_mobile = COALESCE($9, parent_mobile),
-           parent_email = COALESCE($10, parent_email),
-           grade = COALESCE($11, grade),
-           academic_history = COALESCE($12, academic_history),
-           admission_no = COALESCE($13, admission_no)
-       WHERE id = $14
+           student_name = COALESCE($3, student_name),
+           class_name = COALESCE($4, class_name),
+           section = COALESCE($5, section),
+           roll_number = COALESCE($6, roll_number),
+           academic_year = COALESCE($7, academic_year),
+           status = COALESCE($8, status),
+           parent_name = COALESCE($9, parent_name),
+           parent_mobile = COALESCE($10, parent_mobile),
+           parent_email = COALESCE($11, parent_email),
+           grade = COALESCE($12, grade),
+           academic_history = COALESCE($13, academic_history),
+           admission_no = COALESCE($14, admission_no),
+           admission_number = COALESCE($14, admission_number),
+           date_of_birth = COALESCE($15, date_of_birth),
+           father_name = COALESCE($16, father_name),
+           mother_name = COALESCE($17, mother_name),
+           address = COALESCE($18, address)
+       WHERE id = $19
        RETURNING *`,
       [
-        data.firstName || data.first_name,
-        data.lastName || data.last_name,
-        data.className || data.class_name,
+        firstName,
+        lastName,
+        studentName,
+        data.className || data.class_name || data.class,
         data.section,
         data.rollNumber !== undefined && data.rollNumber !== '' && data.rollNumber !== null ? Number(data.rollNumber) : undefined,
         data.academicYear || data.academic_year,
@@ -609,11 +938,39 @@ const Student = {
         data.parentEmail || data.parent_email,
         data.grade,
         data.academicHistory ? JSON.stringify(data.academicHistory) : undefined,
-        data.admissionNo || data.admission_no,
+        admissionNo,
+        data.dateOfBirth || data.date_of_birth,
+        data.fatherName || data.father_name,
+        data.motherName || data.mother_name,
+        data.address,
         id
       ]
     );
-    return res.rows[0] ? toCamelCase(res.rows[0]) : null;
+
+    if (!res.rows[0]) return null;
+    const updated = toCamelCase(res.rows[0]);
+
+    // Keep Academic History synchronized for the active year without deleting history
+    const activeYear = data.academicYear || updated.academicYear;
+    const activeClass = data.className || data.class || updated.className;
+    if (activeYear && activeClass) {
+      await StudentAcademicHistory.create({
+        studentId: id,
+        academicYear: activeYear,
+        class: activeClass,
+        section: data.section !== undefined ? data.section : (updated.section || ''),
+        rollNumber: data.rollNumber !== undefined ? String(data.rollNumber) : (updated.rollNumber !== null ? String(updated.rollNumber) : ''),
+        status: data.status || updated.status || 'Active'
+      });
+    }
+
+    const histRes = await pool.query(
+      'SELECT * FROM public.student_academic_history WHERE student_id = $1 ORDER BY academic_year DESC, created_at DESC',
+      [id]
+    );
+    updated.academicHistory = histRes.rows.map(toCamelCase);
+
+    return updated;
   },
 
   async findOneAndUpdate(filter = {}, data = {}, options = {}) {
@@ -720,9 +1077,28 @@ const Attendance = {
   },
 
   async create(data) {
+    let academicRecordId = data.academicRecordId || null;
+    let academicYear = data.academicYear || null;
+    let className = data.className || '';
+
+    if (!academicRecordId && data.studentId) {
+      const hist = await pool.query(
+        'SELECT id, academic_year, class FROM public.student_academic_history WHERE student_id = $1 ORDER BY academic_year DESC LIMIT 1',
+        [data.studentId]
+      );
+      if (hist.rows[0]) {
+        academicRecordId = hist.rows[0].id;
+        academicYear = academicYear || hist.rows[0].academic_year;
+        className = className || hist.rows[0].class;
+      }
+    }
+
     const res = await pool.query(
-      `INSERT INTO public.attendance (student_id, date, status, session_status, attendance_type, remarks)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO public.attendance (
+        student_id, date, status, session_status, attendance_type, remarks,
+        academic_record_id, academic_year, class_name
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
         data.studentId,
@@ -730,7 +1106,10 @@ const Attendance = {
         data.status || 'Present',
         data.sessionStatus || 'Full Day',
         data.attendanceType || 'Full Day',
-        data.remarks || ''
+        data.remarks || '',
+        academicRecordId,
+        academicYear,
+        className
       ]
     );
     return toCamelCase(res.rows[0]);
@@ -739,15 +1118,36 @@ const Attendance = {
   async findOneAndUpdate(filter = {}, data = {}, options = {}) {
     const studentId = filter.studentId;
     const date = filter.date;
+    let academicRecordId = data.academicRecordId || null;
+    let academicYear = data.academicYear || null;
+    let className = data.className || '';
+
+    if (!academicRecordId && studentId) {
+      const hist = await pool.query(
+        'SELECT id, academic_year, class FROM public.student_academic_history WHERE student_id = $1 ORDER BY academic_year DESC LIMIT 1',
+        [studentId]
+      );
+      if (hist.rows[0]) {
+        academicRecordId = hist.rows[0].id;
+        academicYear = academicYear || hist.rows[0].academic_year;
+        className = className || hist.rows[0].class;
+      }
+    }
 
     const res = await pool.query(
-      `INSERT INTO public.attendance (student_id, date, status, session_status, attendance_type, remarks)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO public.attendance (
+        student_id, date, status, session_status, attendance_type, remarks,
+        academic_record_id, academic_year, class_name
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (student_id, date) DO UPDATE
        SET status = EXCLUDED.status,
            session_status = EXCLUDED.session_status,
            attendance_type = EXCLUDED.attendance_type,
-           remarks = EXCLUDED.remarks
+           remarks = EXCLUDED.remarks,
+           academic_record_id = COALESCE(EXCLUDED.academic_record_id, attendance.academic_record_id),
+           academic_year = COALESCE(EXCLUDED.academic_year, attendance.academic_year),
+           class_name = COALESCE(EXCLUDED.class_name, attendance.class_name)
        RETURNING *`,
       [
         studentId,
@@ -755,7 +1155,10 @@ const Attendance = {
         data.status || 'Present',
         data.sessionStatus || 'Full Day',
         data.attendanceType || 'Full Day',
-        data.remarks || ''
+        data.remarks || '',
+        academicRecordId,
+        academicYear,
+        className
       ]
     );
     return toCamelCase(res.rows[0]);
@@ -900,13 +1303,25 @@ const Mark = {
   },
 
   async create(data) {
+    let academicRecordId = data.academicRecordId || null;
+    const academicYear = data.academicYear || '2024-2025';
+    if (!academicRecordId && data.studentId) {
+      const hRes = await pool.query(
+        'SELECT id FROM public.student_academic_history WHERE student_id = $1 AND academic_year = $2 LIMIT 1',
+        [data.studentId, academicYear]
+      );
+      if (hRes.rows[0]) {
+        academicRecordId = hRes.rows[0].id;
+      }
+    }
+
     const res = await pool.query(
       `INSERT INTO public.marks (
         student_id, class_teacher_id, subject_teacher_id, teacher_id,
         class_name, academic_year, part, subject, lecture_name,
         score, max_score, oral_score, converted_score, converted_max_score,
-        exam_type, grade
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        exam_type, grade, academic_record_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       ON CONFLICT (student_id, academic_year, exam_type, subject)
       DO UPDATE SET
         class_teacher_id = EXCLUDED.class_teacher_id,
@@ -920,7 +1335,8 @@ const Mark = {
         oral_score = EXCLUDED.oral_score,
         converted_score = EXCLUDED.converted_score,
         converted_max_score = EXCLUDED.converted_max_score,
-        grade = EXCLUDED.grade
+        grade = EXCLUDED.grade,
+        academic_record_id = COALESCE(EXCLUDED.academic_record_id, marks.academic_record_id)
       RETURNING *`,
       [
         data.studentId,
@@ -928,7 +1344,7 @@ const Mark = {
         data.subjectTeacherId || null,
         data.teacherId || null,
         data.className || '',
-        data.academicYear || '2024-2025',
+        academicYear,
         data.part || 'Part A',
         data.subject,
         data.lectureName || '',
@@ -938,7 +1354,8 @@ const Mark = {
         data.convertedScore || 0,
         data.convertedMaxScore || 15,
         data.examType || 'Unit Test',
-        data.grade || ''
+        data.grade || '',
+        academicRecordId
       ]
     );
     return toCamelCase(res.rows[0]);
@@ -949,14 +1366,25 @@ const Mark = {
     const subject = filter.subject;
     const examType = filter.examType;
     const academicYear = filter.academicYear || data.academicYear || '2024-2025';
+    let academicRecordId = data.academicRecordId || null;
+
+    if (!academicRecordId && studentId) {
+      const hRes = await pool.query(
+        'SELECT id FROM public.student_academic_history WHERE student_id = $1 AND academic_year = $2 LIMIT 1',
+        [studentId, academicYear]
+      );
+      if (hRes.rows[0]) {
+        academicRecordId = hRes.rows[0].id;
+      }
+    }
 
     const res = await pool.query(
       `INSERT INTO public.marks (
         student_id, class_teacher_id, subject_teacher_id, teacher_id,
         class_name, academic_year, part, subject, lecture_name,
         score, max_score, oral_score, converted_score, converted_max_score,
-        exam_type, grade
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        exam_type, grade, academic_record_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       ON CONFLICT (student_id, subject, exam_type, academic_year) DO UPDATE
       SET score = EXCLUDED.score,
           max_score = EXCLUDED.max_score,
@@ -967,7 +1395,8 @@ const Mark = {
           class_name = EXCLUDED.class_name,
           class_teacher_id = COALESCE(EXCLUDED.class_teacher_id, marks.class_teacher_id),
           subject_teacher_id = COALESCE(EXCLUDED.subject_teacher_id, marks.subject_teacher_id),
-          teacher_id = COALESCE(EXCLUDED.teacher_id, marks.teacher_id)
+          teacher_id = COALESCE(EXCLUDED.teacher_id, marks.teacher_id),
+          academic_record_id = COALESCE(EXCLUDED.academic_record_id, marks.academic_record_id)
       RETURNING *`,
       [
         studentId,
@@ -985,7 +1414,8 @@ const Mark = {
         data.convertedScore || 0,
         data.convertedMaxScore || 15,
         examType,
-        data.grade || ''
+        data.grade || '',
+        academicRecordId
       ]
     );
     return toCamelCase(res.rows[0]);
@@ -1207,6 +1637,8 @@ module.exports = {
   connectMongo: connectPostgres, // Backward compatibility alias
   User,
   Student,
+  StudentAcademicHistory,
+  AcademicHistory: StudentAcademicHistory,
   Teacher,
   Attendance,
   Mark,
