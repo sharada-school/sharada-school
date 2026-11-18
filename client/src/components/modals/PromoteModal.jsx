@@ -56,6 +56,23 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
   const [sourceYear, setSourceYear] = useState(activeYear);
   const [targetYear, setTargetYear] = useState(defaultNextYear);
 
+  // Available Academic Years for manual selection
+  const availableYears = useMemo(() => {
+    const set = new Set();
+    const currentCalYear = new Date().getFullYear();
+    for (let y = currentCalYear - 2; y <= currentCalYear + 4; y++) {
+      set.add(`${y}-${y + 1}`);
+    }
+    (students || []).forEach((s) => {
+      if (s.academicYear && String(s.academicYear).trim()) {
+        set.add(String(s.academicYear).trim());
+      }
+    });
+    if (sourceYear) set.add(sourceYear);
+    if (targetYear) set.add(targetYear);
+    return Array.from(set).sort();
+  }, [students, sourceYear, targetYear]);
+
   // Manual Selection: Target Class Name
   const [targetClassName, setTargetClassName] = useState(() => {
     if (initialScope?.student) {
@@ -244,65 +261,44 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
           </div>
         )}
 
-        {/* STEP 1 & MANUAL PROMOTION TARGETS */}
+        {/* STEP 1: SELECT ACADEMIC YEAR (PROGRESSION) */}
         <div style={{ background: '#faf9f4', padding: '14px', borderRadius: '12px', border: '1px solid var(--line)', marginBottom: '16px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#102d77', textTransform: 'uppercase', marginBottom: '10px' }}>
-            Promotion Target: Academic Year, Class Name & Section
+            Step 1: Select Academic Year (Progression)
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 1fr', gap: '12px' }}>
-            {/* Target Academic Year */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            {/* From Academic Year */}
             <label style={{ display: 'grid', gap: '6px', fontWeight: 600, color: 'var(--ink)' }}>
-              <span>Target Year <span style={{ color: '#c9664e' }}>*</span></span>
-              <input
-                type="text"
-                value={targetYear}
-                onChange={(e) => setTargetYear(e.target.value)}
-                placeholder="Academic Year"
-                required
-              />
-            </label>
-
-            {/* Manual Selection: Next Class Name */}
-            <label style={{ display: 'grid', gap: '6px', fontWeight: 700, color: '#1237ac' }}>
-              <span>Next Class Name <span style={{ color: '#c9664e' }}>*</span></span>
+              <span>From Academic Year <span style={{ color: '#c9664e' }}>*</span></span>
               <select
-                value={targetClassName}
+                value={sourceYear}
                 onChange={(e) => {
-                  setTargetClassName(e.target.value);
-                  if (error) setError('');
+                  const newSource = e.target.value;
+                  setSourceYear(newSource);
+                  setTargetYear(getNextAcademicYear(newSource));
                 }}
-                style={{
-                  fontWeight: 600,
-                  border: !targetClassName ? '2px solid #e87d63' : '1.5px solid #1237ac',
-                  background: !targetClassName ? '#fff8f6' : '#fff'
-                }}
+                style={{ fontWeight: 600, padding: '9px 12px', fontSize: '13px' }}
                 required
               >
-                <option value="">-- Manual Class Selection --</option>
-                {classNamesList.map((cls) => (
-                  <option value={cls} key={cls}>
-                    {cls}
-                  </option>
+                {availableYears.map((yr) => (
+                  <option value={yr} key={`src-${yr}`}>{yr}</option>
                 ))}
-                <option value="Graduated">Graduated (Completed School)</option>
               </select>
             </label>
 
-            {/* Manual Selection: Academic Section */}
+            {/* To Next Academic Year */}
             <label style={{ display: 'grid', gap: '6px', fontWeight: 700, color: '#1237ac' }}>
-              <span>Academic Section <span style={{ color: '#c9664e' }}>*</span></span>
+              <span>To Next Academic Year <span style={{ color: '#c9664e' }}>*</span></span>
               <select
-                value={targetSection}
-                onChange={(e) => setTargetSection(e.target.value)}
-                disabled={targetClassName === 'Graduated'}
-                style={{ fontWeight: 600 }}
+                value={targetYear}
+                onChange={(e) => setTargetYear(e.target.value)}
+                style={{ fontWeight: 600, padding: '9px 12px', fontSize: '13px', border: '1.5px solid #1237ac', background: '#fff' }}
+                required
               >
-                <option value="">No Section</option>
-                {sectionsList.map((sec) => (
-                  <option value={sec} key={sec}>
-                    Section {sec}
-                  </option>
+                <option value="">-- Select Next Academic Year --</option>
+                {availableYears.map((yr) => (
+                  <option value={yr} key={`tgt-${yr}`}>{yr}</option>
                 ))}
               </select>
             </label>
@@ -312,7 +308,7 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
         {/* STEP 2: SOURCE STUDENT FILTERS */}
         <div style={{ background: '#faf9f4', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--line)', marginBottom: '16px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#102d77', textTransform: 'uppercase', marginBottom: '8px' }}>
-            Filter Current Students to Promote
+            Step 2: Filter Current Students to Promote
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1.6fr', gap: '12px' }}>
@@ -379,7 +375,62 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
           </div>
         </div>
 
-        {/* STEP 3: STUDENT CHECKLIST TABLE */}
+        {/* STEP 3: CHOOSE NEXT CLASS & SECTION (TARGET) */}
+        <div style={{ background: '#f4f7fd', padding: '14px', borderRadius: '12px', border: '1.5px solid #1237ac', marginBottom: '16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#102d77', textTransform: 'uppercase', marginBottom: '10px' }}>
+            Step 3: Choose Next Class & Academic Section (Target) <span style={{ color: '#c9664e' }}>*</span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '14px' }}>
+            {/* Manual Selection: Next Class Name */}
+            <label style={{ display: 'grid', gap: '6px', fontWeight: 700, color: '#1237ac' }}>
+              <span>Next Class Name <span style={{ color: '#c9664e' }}>*</span></span>
+              <select
+                value={targetClassName}
+                onChange={(e) => {
+                  setTargetClassName(e.target.value);
+                  if (error) setError('');
+                }}
+                style={{
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  padding: '9px 12px',
+                  border: !targetClassName ? '2px solid #e87d63' : '2px solid #1237ac',
+                  background: !targetClassName ? '#fff8f6' : '#fff'
+                }}
+                required
+              >
+                <option value="">-- Manual Next Class Selection --</option>
+                {classNamesList.map((cls) => (
+                  <option value={cls} key={cls}>
+                    {cls}
+                  </option>
+                ))}
+                <option value="Graduated">Graduated (Completed School)</option>
+              </select>
+            </label>
+
+            {/* Manual Selection: Academic Section */}
+            <label style={{ display: 'grid', gap: '6px', fontWeight: 700, color: '#1237ac' }}>
+              <span>Next Academic Section <span style={{ color: '#c9664e' }}>*</span></span>
+              <select
+                value={targetSection}
+                onChange={(e) => setTargetSection(e.target.value)}
+                disabled={targetClassName === 'Graduated'}
+                style={{ fontWeight: 600, fontSize: '14px', padding: '9px 12px' }}
+              >
+                <option value="">No Section</option>
+                {sectionsList.map((sec) => (
+                  <option value={sec} key={sec}>
+                    Section {sec}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {/* STEP 4: STUDENT CHECKLIST TABLE */}
         <div style={{ marginBottom: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -473,7 +524,7 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
                                 display: 'inline-block'
                               }}
                             >
-                              {finalTargetClass}
+                              {finalTargetClass} {targetYear ? `(${targetYear})` : ''}
                             </span>
                           ) : (
                             <span style={{ fontSize: '11px', color: '#c9664e', fontWeight: 600 }}>
