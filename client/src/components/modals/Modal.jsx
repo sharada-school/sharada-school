@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { X } from 'lucide-react';
 import Field from '../common/Field';
 import {
@@ -15,6 +15,14 @@ import {
   getMarkRule,
   getConvertedMark
 } from '../../utils/grading';
+
+const standardClassOptions = [
+  'Nursery', 'LKG', 'UKG',
+  'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5',
+  'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'
+];
+
+const standardSectionOptions = ['A', 'B', 'C', 'D'];
 
 export function Modal({
   type,
@@ -33,6 +41,17 @@ export function Modal({
     if (!editingItem) return {};
 
     if (type === 'student') {
+      let initClass = editingItem.class || editingItem.className || '';
+      let initSection = editingItem.section || '';
+      const secMatch = initClass.match(/^(.+?)\s+([A-Za-z])$/);
+      if (secMatch) {
+        initClass = secMatch[1].trim();
+        if (!initSection) initSection = secMatch[2].toUpperCase();
+      }
+      if (/^\d+$/.test(initClass)) {
+        initClass = `Class ${initClass}`;
+      }
+
       return {
         id: editingItem.id,
         admissionNo: editingItem.admissionNumber || editingItem.admissionNo || '',
@@ -44,8 +63,8 @@ export function Modal({
         fatherName: editingItem.fatherName || editingItem.parentName || '',
         motherName: editingItem.motherName || '',
         address: editingItem.address || '',
-        className: editingItem.class || editingItem.className || '',
-        section: editingItem.section || '',
+        className: initClass,
+        section: initSection,
         rollNumber: editingItem.rollNumber ?? '',
         email: editingItem.email || '',
         parentName: editingItem.parentName || editingItem.fatherName || '',
@@ -101,6 +120,44 @@ export function Modal({
 
   const set = (key, value) => setForm((previousForm) => ({ ...previousForm, [key]: value }));
 
+  const classOptions = useMemo(() => {
+    const set = new Set(standardClassOptions);
+    (students || []).forEach((s) => {
+      const cls = s.class || s.className;
+      if (cls) {
+        let cleaned = String(cls).replace(/\s+[A-Za-z]$/, '').trim();
+        if (cleaned) {
+          if (/^\d+$/.test(cleaned)) set.add(`Class ${cleaned}`);
+          else set.add(cleaned);
+        }
+      }
+    });
+    if (form.className && String(form.className).trim()) {
+      set.add(String(form.className).trim());
+    }
+    return Array.from(set).sort((a, b) => {
+      const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+      if (numA && numB && numA !== numB) return numA - numB;
+      return a.localeCompare(b);
+    });
+  }, [students, form.className]);
+
+  const sectionOptions = useMemo(() => {
+    const set = new Set(standardSectionOptions);
+    (students || []).forEach((s) => {
+      if (s.section && String(s.section).trim()) {
+        set.add(String(s.section).trim().toUpperCase());
+      }
+      const match = String(s.class || s.className || '').match(/\s+([A-Za-z])$/);
+      if (match) set.add(match[1].toUpperCase());
+    });
+    if (form.section && String(form.section).trim()) {
+      set.add(String(form.section).trim().toUpperCase());
+    }
+    return Array.from(set).sort();
+  }, [students, form.section]);
+
   const submit = async (e) => {
     e.preventDefault();
 
@@ -152,7 +209,7 @@ export function Modal({
         return;
       }
       if (!String(normalized.className || '').trim()) {
-        alert('Please enter class name.');
+        alert('Please select class name.');
         return;
       }
       if (!String(normalized.parentMobile || '').trim()) {
@@ -228,10 +285,33 @@ export function Modal({
             </div>
             <div className="form-row">
               <Field label="Academic Year" placeholder="Academic Year" value={form.academicYear || ''} onChange={(v) => set('academicYear', v)} required={false} />
-              <Field label="Class" placeholder="Class" value={form.className || ''} onChange={(v) => set('className', v)} required={true} />
+              <label>
+                Class Name <span style={{ color: '#c9664e' }}>*</span>
+                <select
+                  value={form.className || ''}
+                  onChange={(e) => set('className', e.target.value)}
+                  required
+                >
+                  <option value="">Select class name</option>
+                  {classOptions.map((cls) => (
+                    <option value={cls} key={cls}>{cls}</option>
+                  ))}
+                </select>
+              </label>
             </div>
             <div className="form-row">
-              <Field label="Section" placeholder="Section" value={form.section || ''} onChange={(v) => set('section', v)} required={false} />
+              <label>
+                Academic Section
+                <select
+                  value={form.section || ''}
+                  onChange={(e) => set('section', e.target.value)}
+                >
+                  <option value="">No Section</option>
+                  {sectionOptions.map((sec) => (
+                    <option value={sec} key={sec}>Section {sec}</option>
+                  ))}
+                </select>
+              </label>
               <Field label="Roll number" type="number" placeholder="Roll number" value={form.rollNumber ?? ''} onChange={(v) => set('rollNumber', v)} required={false} />
             </div>
             <div className="form-row">

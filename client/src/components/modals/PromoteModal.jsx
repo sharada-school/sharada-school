@@ -1,44 +1,105 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { X, GraduationCap, Search, CheckCircle2, ArrowRight } from 'lucide-react';
+import { X, GraduationCap, Search, CheckCircle2, AlertCircle } from 'lucide-react';
 import { getClassLabel, getStudentName } from '../../utils/formatters';
 import { getNextClass, getNextAcademicYear } from '../../utils/grading';
 
-const standardClasses = [
-  '1 A', '1 B', '2 A', '2 B', '3 A', '3 B', '4 A', '4 B', '5 A', '5 B',
-  '6 A', '6 B', '7 A', '7 B', '8 A', '8 B', '9 A', '9 B', '10 A', '10 B'
+const standardClassList = [
+  'Nursery', 'LKG', 'UKG',
+  'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5',
+  'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'
 ];
+
+const standardSections = ['A', 'B', 'C', 'D'];
 
 export function PromoteModal({ onClose, onPromote, students, initialScope }) {
   const activeStudents = useMemo(() => {
     return (students || []).filter((s) => s.status !== 'Graduated');
   }, [students]);
 
-  const classList = useMemo(() => {
-    return Array.from(new Set(activeStudents.map((s) => getClassLabel(s)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
-  }, [activeStudents]);
-
-  const availableClasses = useMemo(() => {
-    return Array.from(new Set([...classList, ...standardClasses])).sort((a, b) => {
-      const numA = parseInt(a, 10) || 0;
-      const numB = parseInt(b, 10) || 0;
+  // Extract all distinct class names (e.g. "Class 1", "Class 5")
+  const classNamesList = useMemo(() => {
+    const set = new Set(standardClassList);
+    (activeStudents || []).forEach((s) => {
+      const raw = String(s.class || s.className || '').trim();
+      const cleaned = raw.replace(/\s+[A-Za-z]$/, '').trim();
+      if (cleaned) {
+        if (/^\d+$/.test(cleaned)) set.add(`Class ${cleaned}`);
+        else if (!/^class\s+/i.test(cleaned) && /^\d+/.test(cleaned)) set.add(`Class ${cleaned}`);
+        else set.add(cleaned);
+      }
+    });
+    return Array.from(set).sort((a, b) => {
+      const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
       if (numA !== numB) return numA - numB;
       return a.localeCompare(b);
     });
-  }, [classList]);
+  }, [activeStudents]);
+
+  // Extract all distinct sections (e.g. "A", "B", "C")
+  const sectionsList = useMemo(() => {
+    const set = new Set(standardSections);
+    (activeStudents || []).forEach((s) => {
+      if (s.section && String(s.section).trim()) {
+        set.add(String(s.section).trim().toUpperCase());
+      }
+      const match = String(s.class || s.className || '').match(/\s+([A-Za-z])$/);
+      if (match) set.add(match[1].toUpperCase());
+    });
+    return Array.from(set).sort();
+  }, [activeStudents]);
 
   const activeYear = students?.find((s) => s.academicYear && s.status !== 'Graduated')?.academicYear || '2024-2025';
   const defaultNextYear = getNextAcademicYear(activeYear);
 
-  // Workflow State
+  // Form State
   const [sourceYear, setSourceYear] = useState(activeYear);
   const [targetYear, setTargetYear] = useState(defaultNextYear);
-  const [selectedClass, setSelectedClass] = useState(initialScope?.className || '');
-  const [targetClass, setTargetClass] = useState(() => {
+
+  // Manual Selection: Target Class Name
+  const [targetClassName, setTargetClassName] = useState(() => {
     if (initialScope?.student) {
-      return getNextClass(getClassLabel(initialScope.student)) || '';
+      const next = getNextClass(getClassLabel(initialScope.student));
+      if (next && next !== 'Graduated') {
+        const cleaned = next.replace(/\s+[A-Za-z]$/, '').trim();
+        return /^\d+$/.test(cleaned) ? `Class ${cleaned}` : cleaned;
+      }
+      return next || '';
     }
     if (initialScope?.className) {
-      return getNextClass(initialScope.className) || '';
+      const next = getNextClass(initialScope.className);
+      if (next && next !== 'Graduated') {
+        const cleaned = next.replace(/\s+[A-Za-z]$/, '').trim();
+        return /^\d+$/.test(cleaned) ? `Class ${cleaned}` : cleaned;
+      }
+      return next || '';
+    }
+    return '';
+  });
+
+  // Manual Selection: Target Academic Section
+  const [targetSection, setTargetSection] = useState(() => {
+    if (initialScope?.student?.section) return initialScope.student.section;
+    if (initialScope?.className) {
+      const match = String(initialScope.className).match(/\s+([A-Za-z])$/);
+      if (match) return match[1].toUpperCase();
+    }
+    return 'A';
+  });
+
+  // Filters for Source Students
+  const [filterClass, setFilterClass] = useState(() => {
+    if (initialScope?.className) {
+      const cleaned = initialScope.className.replace(/\s+[A-Za-z]$/, '').trim();
+      return /^\d+$/.test(cleaned) ? `Class ${cleaned}` : cleaned;
+    }
+    return '';
+  });
+
+  const [filterSection, setFilterSection] = useState(() => {
+    if (initialScope?.className) {
+      const match = String(initialScope.className).match(/\s+([A-Za-z])$/);
+      return match ? match[1].toUpperCase() : '';
     }
     return '';
   });
@@ -47,15 +108,7 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Automatically suggest next class when source class is chosen
-  useEffect(() => {
-    if (selectedClass && (!targetClass || targetClass === 'auto')) {
-      const suggested = getNextClass(selectedClass);
-      if (suggested) setTargetClass(suggested);
-    }
-  }, [selectedClass]);
-
-  // Checklist of student IDs
+  // Initial student selection checklist
   const [selectedIds, setSelectedIds] = useState(() => {
     if (initialScope?.student) {
       const id = initialScope.student.id || initialScope.student._id;
@@ -70,11 +123,22 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
     return new Set(activeStudents.map((s) => s.id || s._id));
   });
 
-  // Filter students based on class selection and search query
+  // Filter students based on manual class filter, section filter and search query
   const displayedStudents = useMemo(() => {
     return activeStudents.filter((s) => {
-      const matchesClass = !selectedClass || getClassLabel(s) === selectedClass;
-      if (!matchesClass) return false;
+      const rawClass = String(s.class || s.className || '').trim();
+      let sCls = rawClass.replace(/\s+[A-Za-z]$/, '').trim();
+      if (/^\d+$/.test(sCls)) sCls = `Class ${sCls}`;
+
+      let sSec = String(s.section || '').trim().toUpperCase();
+      if (!sSec) {
+        const secMatch = rawClass.match(/\s+([A-Za-z])$/);
+        if (secMatch) sSec = secMatch[1].toUpperCase();
+      }
+
+      if (filterClass && sCls.toLowerCase() !== filterClass.toLowerCase()) return false;
+      if (filterSection && sSec !== filterSection.toUpperCase()) return false;
+
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
       const name = getStudentName(s).toLowerCase();
@@ -82,7 +146,7 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
       const roll = String(s.rollNumber || '').toLowerCase();
       return name.includes(q) || adm.includes(q) || roll.includes(q);
     });
-  }, [activeStudents, selectedClass, searchQuery]);
+  }, [activeStudents, filterClass, filterSection, searchQuery]);
 
   const isAllDisplayedSelected =
     displayedStudents.length > 0 &&
@@ -116,14 +180,20 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
     setSelectedIds(next);
   };
 
+  const finalTargetClass = targetClassName === 'Graduated'
+    ? 'Graduated'
+    : targetSection
+      ? `${targetClassName} ${targetSection}`.trim()
+      : targetClassName;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!targetYear.trim()) {
       setError('Please provide a target academic year.');
       return;
     }
-    if (!targetClass.trim()) {
-      setError('Please select the Next Class. Selecting the next class is mandatory.');
+    if (!targetClassName.trim()) {
+      setError('Please manually select the Next Class Name.');
       return;
     }
     if (selectedIds.size === 0) {
@@ -138,8 +208,10 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
         sourceYear: sourceYear.trim(),
         currentYear: sourceYear.trim(),
         targetYear: targetYear.trim(),
-        targetClass: targetClass.trim(),
-        className: selectedClass || undefined,
+        targetClass: finalTargetClass,
+        targetClassName: targetClassName.trim(),
+        targetSection: targetClassName === 'Graduated' ? '' : targetSection.trim(),
+        nextClass: finalTargetClass,
         studentIds: Array.from(selectedIds),
         scope: selectedIds.size === activeStudents.length ? 'all' : 'selected'
       };
@@ -152,7 +224,7 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
 
   return (
     <div className="modal-backdrop">
-      <form className="modal" style={{ width: 'min(760px, 98vw)', maxHeight: '92vh', overflowY: 'auto' }} onSubmit={handleSubmit}>
+      <form className="modal" style={{ width: 'min(820px, 98vw)', maxHeight: '92vh', overflowY: 'auto' }} onSubmit={handleSubmit}>
         <div className="modal-head">
           <div>
             <span className="eyebrow" style={{ color: '#1237ac' }}>ACADEMIC YEAR PROGRESSION</span>
@@ -161,109 +233,155 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
           <button type="button" className="icon-button" onClick={onClose}><X size={19} /></button>
         </div>
 
-        <p className="modal-help" style={{ marginBottom: '14px' }}>
-          Advance students to their next academic year. New academic history records will be created without deleting previous records.
+        <p className="modal-help" style={{ margin: '0 0 16px 0', fontSize: '13px' }}>
+          Advance students to the next school year. Manually select the target class and academic section below.
         </p>
 
-        {error && <div className="error" style={{ marginBottom: '12px' }}>{error}</div>}
-
-        {/* Step 1: Select Academic Year */}
-        <div style={{ background: '#faf9f4', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--line)', marginBottom: '12px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#102d77', textTransform: 'uppercase', marginBottom: '8px' }}>
-            Step 1: Academic Year Progression
+        {error && (
+          <div className="error" style={{ marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', background: '#fae3db', borderRadius: '8px' }}>
+            <AlertCircle size={16} />
+            <span>{error}</span>
           </div>
-          <div className="form-row" style={{ margin: 0 }}>
-            <label>
-              Current Academic Year
-              <input
-                type="text"
-                value={sourceYear}
-                onChange={(e) => setSourceYear(e.target.value)}
-                placeholder="Current Session"
-                required
-              />
-            </label>
-            <label>
-              Target Academic Year *
+        )}
+
+        {/* STEP 1 & MANUAL PROMOTION TARGETS */}
+        <div style={{ background: '#faf9f4', padding: '14px', borderRadius: '12px', border: '1px solid var(--line)', marginBottom: '16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#102d77', textTransform: 'uppercase', marginBottom: '10px' }}>
+            Promotion Target: Academic Year, Class Name & Section
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 1fr', gap: '12px' }}>
+            {/* Target Academic Year */}
+            <label style={{ display: 'grid', gap: '6px', fontWeight: 600, color: 'var(--ink)' }}>
+              <span>Target Year <span style={{ color: '#c9664e' }}>*</span></span>
               <input
                 type="text"
                 value={targetYear}
                 onChange={(e) => setTargetYear(e.target.value)}
-                placeholder="e.g. 2027-2028"
+                placeholder="Academic Year"
                 required
               />
+            </label>
+
+            {/* Manual Selection: Next Class Name */}
+            <label style={{ display: 'grid', gap: '6px', fontWeight: 700, color: '#1237ac' }}>
+              <span>Next Class Name <span style={{ color: '#c9664e' }}>*</span></span>
+              <select
+                value={targetClassName}
+                onChange={(e) => {
+                  setTargetClassName(e.target.value);
+                  if (error) setError('');
+                }}
+                style={{
+                  fontWeight: 600,
+                  border: !targetClassName ? '2px solid #e87d63' : '1.5px solid #1237ac',
+                  background: !targetClassName ? '#fff8f6' : '#fff'
+                }}
+                required
+              >
+                <option value="">-- Manual Class Selection --</option>
+                {classNamesList.map((cls) => (
+                  <option value={cls} key={cls}>
+                    {cls}
+                  </option>
+                ))}
+                <option value="Graduated">Graduated (Completed School)</option>
+              </select>
+            </label>
+
+            {/* Manual Selection: Academic Section */}
+            <label style={{ display: 'grid', gap: '6px', fontWeight: 700, color: '#1237ac' }}>
+              <span>Academic Section <span style={{ color: '#c9664e' }}>*</span></span>
+              <select
+                value={targetSection}
+                onChange={(e) => setTargetSection(e.target.value)}
+                disabled={targetClassName === 'Graduated'}
+                style={{ fontWeight: 600 }}
+              >
+                <option value="">No Section</option>
+                {sectionsList.map((sec) => (
+                  <option value={sec} key={sec}>
+                    Section {sec}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
         </div>
 
-        {/* Step 2 & 4: Class & Next Class Selection */}
-        <div style={{ background: '#faf9f4', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--line)', marginBottom: '12px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#102d77', textTransform: 'uppercase', marginBottom: '8px' }}>
-                Step 2: Filter Source Class
-              </div>
-              <label style={{ margin: 0 }}>
-                <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}>
-                  <option value="">All Classes ({activeStudents.length} students)</option>
-                  {classList.map((cls) => (
-                    <option value={cls} key={cls}>
-                      Class {cls} ({activeStudents.filter((s) => getClassLabel(s) === cls).length} students)
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+        {/* STEP 2: SOURCE STUDENT FILTERS */}
+        <div style={{ background: '#faf9f4', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--line)', marginBottom: '16px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#102d77', textTransform: 'uppercase', marginBottom: '8px' }}>
+            Filter Current Students to Promote
+          </div>
 
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#1237ac', textTransform: 'uppercase', marginBottom: '8px' }}>
-                Step 4: Choose Next Class * (Mandatory)
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1.6fr', gap: '12px' }}>
+            {/* Filter Current Class */}
+            <label style={{ display: 'grid', gap: '5px', fontWeight: 600, color: 'var(--ink)' }}>
+              <span>Current Class</span>
+              <select
+                value={filterClass}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterClass(val);
+                  if (val) {
+                    const next = getNextClass(val);
+                    if (next && next !== 'Graduated') {
+                      const cleaned = next.replace(/\s+[A-Za-z]$/, '').trim();
+                      setTargetClassName(/^\d+$/.test(cleaned) ? `Class ${cleaned}` : cleaned);
+                    } else if (next === 'Graduated') {
+                      setTargetClassName('Graduated');
+                    }
+                  }
+                }}
+              >
+                <option value="">All Current Classes</option>
+                {classNamesList.map((cls) => (
+                  <option value={cls} key={cls}>{cls}</option>
+                ))}
+              </select>
+            </label>
+
+            {/* Filter Current Section */}
+            <label style={{ display: 'grid', gap: '5px', fontWeight: 600, color: 'var(--ink)' }}>
+              <span>Current Section</span>
+              <select
+                value={filterSection}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterSection(val);
+                  if (val && !targetSection) {
+                    setTargetSection(val);
+                  }
+                }}
+              >
+                <option value="">All Sections</option>
+                {sectionsList.map((sec) => (
+                  <option value={sec} key={sec}>Section {sec}</option>
+                ))}
+              </select>
+            </label>
+
+            {/* Search input */}
+            <label style={{ display: 'grid', gap: '5px', fontWeight: 600, color: 'var(--ink)' }}>
+              <span>Search Students</span>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search name, roll or admission..."
+                  style={{ paddingLeft: '34px' }}
+                />
+                <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
               </div>
-              <label style={{ margin: 0 }}>
-                <select
-                  value={targetClass}
-                  onChange={(e) => {
-                    setTargetClass(e.target.value);
-                    if (error) setError('');
-                  }}
-                  required
-                >
-                  <option value="">-- Select Next Class (Mandatory) --</option>
-                  <option value="auto">Auto-Advance Each Student (+1 Grade)</option>
-                  {availableClasses.map((cls) => (
-                    <option value={cls} key={cls}>
-                      Class {cls}
-                    </option>
-                  ))}
-                  <option value="Graduated">Graduated (Completed School)</option>
-                </select>
-              </label>
-            </div>
+            </label>
           </div>
         </div>
 
-        {/* Step 3: Display Student List with Checklist */}
-        <div style={{ marginBottom: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-            <div>
-              <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: '#102d77', textTransform: 'uppercase' }}>
-                Step 3: Select Students to Promote
-              </span>
-            </div>
-
-            <div style={{ position: 'relative', width: '220px' }}>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search name, roll..."
-                style={{ paddingLeft: '32px', height: '32px', fontSize: '12px' }}
-              />
-              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        {/* STEP 3: STUDENT CHECKLIST TABLE */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, margin: 0 }}>
                 <input
@@ -287,9 +405,9 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
             </div>
           </div>
 
-          <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '10px', background: '#faf9f4' }}>
+          <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '12px', background: '#faf9f4' }}>
             {displayedStudents.length === 0 ? (
-              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
                 No active students match this filter.
               </div>
             ) : (
@@ -302,12 +420,13 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
                         checked={isAllDisplayedSelected}
                         onChange={toggleSelectAllDisplayed}
                         style={{ width: '15px', height: '15px', cursor: 'pointer', margin: 0 }}
+                        title="Toggle selection for all students in view"
                       />
                     </th>
                     <th style={{ padding: '8px 10px' }}>Student</th>
-                    <th style={{ padding: '8px 10px' }}>Current Class</th>
-                    <th style={{ padding: '8px 10px' }}>Next Class</th>
-                    <th style={{ padding: '8px 10px' }}>Roll / Adm</th>
+                    <th style={{ padding: '8px 10px' }}>Current Class & Section</th>
+                    <th style={{ padding: '8px 10px' }}>Promote to (Next Class & Sec)</th>
+                    <th style={{ padding: '8px 10px' }}>Roll / Admission</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -315,10 +434,7 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
                     const sid = s.id || s._id;
                     const isSelected = selectedIds.has(sid);
                     const currentCls = getClassLabel(s);
-                    const computedNext = targetClass === 'auto'
-                      ? getNextClass(currentCls)
-                      : (targetClass || getNextClass(currentCls));
-                    const isGrad = computedNext === 'Graduated' || /graduated/i.test(computedNext);
+                    const isGrad = targetClassName === 'Graduated';
 
                     return (
                       <tr
@@ -341,9 +457,11 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
                         <td style={{ padding: '6px 10px' }}>
                           <strong>{getStudentName(s)}</strong>
                         </td>
-                        <td style={{ padding: '6px 10px' }}>{currentCls}</td>
                         <td style={{ padding: '6px 10px' }}>
-                          {targetClass ? (
+                          {currentCls} {s.section ? `(Sec ${s.section})` : ''}
+                        </td>
+                        <td style={{ padding: '6px 10px' }}>
+                          {targetClassName ? (
                             <span
                               style={{
                                 fontSize: '11px',
@@ -355,11 +473,11 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
                                 display: 'inline-block'
                               }}
                             >
-                              {computedNext}
+                              {finalTargetClass}
                             </span>
                           ) : (
-                            <span style={{ fontSize: '11px', color: '#a0aec0', fontStyle: 'italic' }}>
-                              Select next class above
+                            <span style={{ fontSize: '11px', color: '#c9664e', fontWeight: 600 }}>
+                              ⚠️ Select Class above
                             </span>
                           )}
                         </td>
@@ -375,27 +493,33 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
           </div>
         </div>
 
-        {/* Step 5: Explanation & Confirmation */}
-        <div style={{ padding: '10px 12px', background: '#eef3f7', borderRadius: '10px', fontSize: '11px', color: '#102d77', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-          <CheckCircle2 size={16} color="#1237ac" style={{ flexShrink: 0 }} />
+        {/* REASSURANCE NOTICE */}
+        <div style={{ padding: '10px 14px', background: '#eef3f7', borderRadius: '10px', fontSize: '12px', color: '#102d77', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+          <CheckCircle2 size={18} color="#1237ac" style={{ flexShrink: 0 }} />
           <span>
-            <strong>Step 5 (Confirm):</strong> New academic history records will be created for {targetYear}. Previous academic records ({sourceYear}) remain permanently archived as "Promoted". Existing marks and attendance are preserved and never deleted.
+            New academic history records will be created with the manually selected class and section. Previous academic records and marks remain permanently archived as "Promoted".
           </span>
         </div>
 
+        {/* MODAL ACTIONS */}
         <div className="modal-actions" style={{ margin: 0 }}>
           <button type="button" className="outline-button" onClick={onClose} disabled={loading}>
             Cancel
           </button>
-          <button type="submit" className="primary-button" disabled={loading || selectedIds.size === 0 || !targetClass.trim()}>
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={loading || selectedIds.size === 0 || !targetClassName.trim()}
+            style={{ minWidth: '240px' }}
+          >
             <GraduationCap size={16} />
             {loading
               ? 'Promoting...'
-              : !targetClass.trim()
-                ? 'Select Next Class to Promote'
+              : !targetClassName.trim()
+                ? 'Select Next Class & Section'
                 : selectedIds.size === activeStudents.length
-                  ? `Confirm Promotion for All ${selectedIds.size} Students`
-                  : `Confirm Promotion for ${selectedIds.size} Selected Student(s)`}
+                  ? `Promote All ${selectedIds.size} to ${finalTargetClass}`
+                  : `Promote ${selectedIds.size} Student(s) to ${finalTargetClass}`}
           </button>
         </div>
       </form>

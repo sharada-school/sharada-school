@@ -328,15 +328,35 @@ const promoteStudents = async (req, res) => {
       const prevYear = currentYear || sourceYear || student.academicYear || '2024-2025';
 
       const nextAcademicYear = targetYear || getNextAcademicYear(prevYear);
-      const newClass = (chosenNextClass && chosenNextClass !== 'auto')
-        ? chosenNextClass
-        : getNextClass(prevClass);
+      const targetClassName = req.body.targetClassName || '';
+      const chosenTargetClass = req.body.targetClass || req.body.nextClass || '';
+
+      let newClass = String(targetClassName || chosenTargetClass || '').trim();
+      if (!newClass || newClass === 'auto') {
+        newClass = getNextClass(prevClass);
+      }
       const isGraduated = newClass === 'Graduated' || /graduated/i.test(newClass);
 
-      let newSection = targetSection !== undefined ? targetSection : prevSection;
-      const sectionMatch = newClass.match(/^(.+?)\s+([A-Za-z])$/);
-      if (sectionMatch) {
-        newSection = sectionMatch[2];
+      let newSection = '';
+      if (!isGraduated) {
+        if (targetSection !== undefined && targetSection !== null) {
+          newSection = String(targetSection).trim();
+        } else {
+          const secMatch = newClass.match(/^(.+?)\s+([A-Za-z])$/);
+          if (secMatch) {
+            newSection = secMatch[2].toUpperCase();
+            newClass = secMatch[1].trim();
+          } else {
+            newSection = prevSection;
+          }
+        }
+      }
+
+      if (!isGraduated && newSection) {
+        const trailingSec = new RegExp(`\\s+${newSection}$`, 'i');
+        if (trailingSec.test(newClass)) {
+          newClass = newClass.replace(trailingSec, '').trim();
+        }
       }
 
       // Step A: Mark previous academic record as Promoted (NEVER delete)

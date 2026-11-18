@@ -10,8 +10,15 @@ export const attendanceOptions = [
 
 export const getClassLabel = (student) => {
   if (!student) return '';
-  const cls = student.class || student.className || '';
-  if (student.section) return `${cls} ${student.section}`.trim();
+  const cls = String(student.class || student.className || '').trim();
+  if (!cls) return '';
+  if (student.section && String(student.section).trim()) {
+    const sec = String(student.section).trim();
+    if (new RegExp(`\\s+${sec}$`, 'i').test(cls)) {
+      return cls;
+    }
+    return `${cls} ${sec}`.trim();
+  }
   return cls;
 };
 
