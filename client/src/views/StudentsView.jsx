@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, GraduationCap, ChevronRight } from 'lucide-react';
+import { Search, GraduationCap } from 'lucide-react';
 import { getClassLabel, getStudentAverage, getStudentName } from '../utils/formatters';
 
 export function StudentsView({
@@ -48,7 +48,7 @@ export function StudentsView({
         <table>
           <thead>
             <tr>
-              <th>Student</th><th>Admission ID</th><th>Class</th><th>Contact</th><th>Performance</th><th></th>
+              <th>Student</th><th>Admission ID</th><th>Class</th><th>Contact</th><th>Performance</th>
             </tr>
           </thead>
           <tbody>
@@ -77,7 +77,6 @@ export function StudentsView({
                     <div className="mini-progress"><span style={{ width: `${getStudentAverage(s)}%` }}></span></div>
                     <small>{getStudentAverage(s)}% avg.</small>
                   </td>
-                  <td><ChevronRight size={16} className="muted" /></td>
                 </tr>
               );
             })}
