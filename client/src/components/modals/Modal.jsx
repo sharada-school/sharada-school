@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { X } from 'lucide-react';
+import { X, Loader2, Trash2 } from 'lucide-react';
 import Field from '../common/Field';
 import {
   getClassLabel,
@@ -121,6 +121,7 @@ export function Modal({
     };
   });
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const set = (key, value) => setForm((previousForm) => ({ ...previousForm, [key]: value }));
 
   const classOptions = useMemo(() => {
@@ -241,7 +242,12 @@ export function Modal({
       return;
     }
 
-    onSave(type === 'student' ? 'students' : type === 'teacher' ? 'teachers' : type === 'mark' ? 'marks' : 'attendance', normalized);
+    setIsSubmitting(true);
+    try {
+      await onSave(type === 'student' ? 'students' : type === 'teacher' ? 'teachers' : type === 'mark' ? 'marks' : 'attendance', normalized);
+    } catch {
+      setIsSubmitting(false);
+    }
   };
 
   const isEditing = Boolean(editingItem);
@@ -456,24 +462,39 @@ export function Modal({
             {isEditing && type === 'student' && user?.role === 'admin' && onDeleteStudent && (
               <button
                 type="button"
-                className="outline-button danger"
-                style={{ color: '#dc2626', borderColor: '#fca5a5' }}
-                onClick={() => {
+                className={`outline-button danger ${isSubmitting ? 'button-loading' : ''}`}
+                disabled={isSubmitting}
+                style={{ color: '#dc2626', borderColor: '#fca5a5', display: 'flex', alignItems: 'center', gap: '6px' }}
+                onClick={async () => {
                   const studentName = form.studentName || `${form.firstName || ''} ${form.lastName || ''}`.trim() || 'this student';
                   if (window.confirm(`Are you sure you want to delete ${studentName}? This will permanently remove the student and all associated records.`)) {
-                    onDeleteStudent(form.id);
-                    onClose();
+                    setIsSubmitting(true);
+                    try {
+                      await onDeleteStudent(form.id);
+                      onClose();
+                    } finally {
+                      setIsSubmitting(false);
+                    }
                   }
                 }}
               >
-                Delete student
+                {isSubmitting ? <Loader2 size={15} className="spinner" /> : <Trash2 size={15} />}
+                {isSubmitting ? 'Deleting...' : 'Delete student'}
               </button>
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button type="button" className="outline-button" onClick={onClose}>Cancel</button>
-            <button type="submit" className="primary-button">
-              {type === 'student' ? (isEditing ? 'Update student' : 'Create student') : type === 'teacher' ? (isEditing ? 'Update teacher' : 'Create teacher') : type === 'mark' ? (isEditing ? 'Update marks' : 'Submit marks') : (isEditing ? 'Update attendance' : 'Submit attendance')}
+            <button type="button" className="outline-button" onClick={onClose} disabled={isSubmitting}>Cancel</button>
+            <button
+              type="submit"
+              className={`primary-button ${isSubmitting ? 'button-loading' : ''}`}
+              disabled={isSubmitting}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              {isSubmitting && <Loader2 size={16} className="spinner" />}
+              {isSubmitting
+                ? (isEditing ? 'Updating...' : 'Saving...')
+                : (type === 'student' ? (isEditing ? 'Update student' : 'Create student') : type === 'teacher' ? (isEditing ? 'Update teacher' : 'Create teacher') : type === 'mark' ? (isEditing ? 'Update marks' : 'Submit marks') : (isEditing ? 'Update attendance' : 'Submit attendance'))}
             </button>
           </div>
         </div>

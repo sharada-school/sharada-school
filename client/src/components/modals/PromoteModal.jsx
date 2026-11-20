@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { X, GraduationCap, Search, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, GraduationCap, Search, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { getClassLabel, getStudentName } from '../../utils/formatters';
 import { getNextClass, getNextAcademicYear } from '../../utils/grading';
 
@@ -559,11 +559,11 @@ export function PromoteModal({ onClose, onPromote, students, initialScope }) {
           </button>
           <button
             type="submit"
-            className="primary-button"
+            className={`primary-button ${loading ? 'button-loading' : ''}`}
             disabled={loading || selectedIds.size === 0 || !targetClassName.trim()}
-            style={{ minWidth: '240px' }}
+            style={{ minWidth: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
           >
-            <GraduationCap size={16} />
+            {loading ? <Loader2 size={16} className="spinner" /> : <GraduationCap size={16} />}
             {loading
               ? 'Promoting...'
               : !targetClassName.trim()

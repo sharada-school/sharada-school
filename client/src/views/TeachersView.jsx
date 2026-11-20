@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 
 export function TeachersView({ teachers, onEditTeacher, onDeleteTeacher }) {
+  const [deletingId, setDeletingId] = useState(null);
+
   return (
     <div className="content">
       <div className="page-title">
@@ -18,8 +21,25 @@ export function TeachersView({ teachers, onEditTeacher, onDeleteTeacher }) {
             <div className="teacher-meta"><span>Email</span><strong>{teacher.email || 'Not provided'}</strong></div>
             <div className="teacher-meta"><span>Phone</span><strong>{teacher.phone || 'Not provided'}</strong></div>
             <div className="action-group" style={{ marginTop: '16px' }}>
-              <button type="button" className="text-button" onClick={() => onEditTeacher(teacher)}>Edit</button>
-              <button type="button" className="text-button danger" onClick={() => onDeleteTeacher(teacher.id)}>Delete</button>
+              <button type="button" className="text-button" onClick={() => onEditTeacher(teacher)} disabled={Boolean(deletingId)}>Edit</button>
+              <button
+                type="button"
+                className={`text-button danger ${deletingId === teacher.id ? 'button-loading' : ''}`}
+                disabled={Boolean(deletingId)}
+                onClick={async () => {
+                  if (window.confirm(`Are you sure you want to delete ${teacher.name}?`)) {
+                    setDeletingId(teacher.id);
+                    try {
+                      await onDeleteTeacher(teacher.id);
+                    } finally {
+                      setDeletingId(null);
+                    }
+                  }
+                }}
+              >
+                {deletingId === teacher.id ? <Loader2 size={13} className="spinner" /> : null}
+                {deletingId === teacher.id ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
           </div>
         ))}

@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ClipboardList,
   GraduationCap,
+  Loader2,
   LogOut,
   Menu,
   Plus,
@@ -47,6 +48,7 @@ export function App() {
   const [marksYearFilter, setMarksYearFilter] = useState('all');
   const [modal, setModal] = useState(null);
   const [notice, setNotice] = useState('');
+  const [loadingMessage, setLoadingMessage] = useState('');
 
   const refreshDashboard = async () => {
     try {
@@ -169,6 +171,9 @@ export function App() {
   };
 
   const saveRecord = async (type, payload) => {
+    const isEdit = Boolean(payload?.id);
+    const entityLabel = type === 'students' ? 'student' : type === 'teachers' ? 'teacher' : type === 'marks' ? 'marks' : 'attendance';
+    setLoadingMessage(isEdit ? `Updating ${entityLabel}...` : `Saving ${entityLabel}...`);
     try {
       const mode = payload?.id ? 'PUT' : 'POST';
       const isEditingStudent = type === 'students' && payload?.id;
@@ -237,12 +242,15 @@ export function App() {
       setNotice(`${type[0].toUpperCase() + type.slice(1)} saved successfully`);
     } catch (error) {
       setNotice(error.message || 'Save failed. Please review the details and try again.');
+    } finally {
+      setLoadingMessage('');
     }
     setModal(null);
     setTimeout(() => setNotice(''), 2600);
   };
 
   const deleteAttendance = async (attendanceId) => {
+    setLoadingMessage('Deleting attendance record...');
     try {
       const response = await apiFetch(`/api/attendance/${attendanceId}`, { method: 'DELETE' }, user);
       if (!response.ok) throw new Error('Delete failed');
@@ -252,11 +260,14 @@ export function App() {
       setNotice('Attendance deleted successfully');
     } catch {
       setNotice('Unable to delete attendance');
+    } finally {
+      setLoadingMessage('');
     }
     setTimeout(() => setNotice(''), 2600);
   };
 
   const deleteMark = async (markId) => {
+    setLoadingMessage('Deleting mark record...');
     try {
       const response = await apiFetch(`/api/marks/${markId}`, { method: 'DELETE' }, user);
       if (!response.ok) throw new Error('Delete failed');
@@ -266,11 +277,14 @@ export function App() {
       setNotice('Marks deleted successfully');
     } catch {
       setNotice('Unable to delete marks');
+    } finally {
+      setLoadingMessage('');
     }
     setTimeout(() => setNotice(''), 2600);
   };
 
   const deleteTeacher = async (teacherId) => {
+    setLoadingMessage('Deleting teacher...');
     try {
       const response = await apiFetch(`/api/teachers/${teacherId}`, { method: 'DELETE' }, user);
       if (!response.ok) throw new Error('Delete failed');
@@ -280,11 +294,14 @@ export function App() {
       setNotice('Teacher deleted successfully');
     } catch {
       setNotice('Unable to delete teacher');
+    } finally {
+      setLoadingMessage('');
     }
     setTimeout(() => setNotice(''), 2600);
   };
 
   const deleteStudent = async (studentId) => {
+    setLoadingMessage('Deleting student & associated records...');
     try {
       const response = await apiFetch(`/api/students/${studentId}`, { method: 'DELETE' }, user);
       if (!response.ok) {
@@ -294,15 +311,19 @@ export function App() {
 
       setStudents((prev) => prev.filter((student) => (student.id || student._id) !== studentId));
       setSelected(null);
+      setView('students');
       await refreshDashboard();
       setNotice('Student deleted successfully');
     } catch (error) {
       setNotice(error.message || 'Unable to delete student');
+    } finally {
+      setLoadingMessage('');
     }
     setTimeout(() => setNotice(''), 2600);
   };
 
   const handlePromoteStudents = async (payload) => {
+    setLoadingMessage('Promoting students...');
     try {
       const response = await apiFetch('/api/students/promote', {
         method: 'POST',
@@ -327,6 +348,8 @@ export function App() {
       setNotice(result.message || `Successfully promoted ${result.promotedCount || 0} student(s) to ${result.targetClass || result.targetYear}!`);
     } catch (error) {
       setNotice(error.message || 'Promotion failed. Please try again.');
+    } finally {
+      setLoadingMessage('');
     }
     setModal(null);
     setTimeout(() => setNotice(''), 3200);
@@ -420,6 +443,12 @@ export function App() {
         </header>
 
         {notice && <div className="toast">{notice}</div>}
+        {loadingMessage && (
+          <div className="global-loading-banner" role="status" aria-live="polite">
+            <Loader2 size={16} className="spinner" />
+            <span>{loadingMessage}</span>
+          </div>
+        )}
 
         {selected ? (
           <StudentDetailView
@@ -439,7 +468,7 @@ export function App() {
             onStudent={openStudent}
             setView={(targetView) => { setView(targetView); setMobileMenuOpen(false); }}
           />
-        ) : view === 'students' ? (
+        ) : view === 'students' || view === 'student' ? (
           <StudentsView
             students={filtered}
             query={query}
@@ -449,7 +478,6 @@ export function App() {
             classFilter={classFilter}
             setClassFilter={setClassFilter}
             onPromoteClass={(cls) => setModal({ type: 'promote', mode: 'class', className: cls })}
-            onDeleteStudent={deleteStudent}
             isAdmin={user.role === 'admin'}
           />
         ) : view === 'attendance' ? (

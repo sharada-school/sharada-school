@@ -1,5 +1,5 @@
-import React from 'react';
-import { Search, CalendarCheck2, BookOpen } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, CalendarCheck2, BookOpen, Loader2 } from 'lucide-react';
 import { getStudentByRef, getStudentName, getClassLabel } from '../utils/formatters';
 import { getMarkRule, getConvertedMark } from '../utils/grading';
 import MarksRegister from '../components/tables/MarksRegister';
@@ -24,6 +24,7 @@ export function EntryView({
   onDeleteAttendance,
   onDeleteMark
 }) {
+  const [deletingId, setDeletingId] = useState(null);
   const rows = type === 'attendance' ? attendanceRecords : type === 'marks' ? marks : [];
   const fullMarks = allMarks && allMarks.length > 0 ? allMarks : marks;
   const filteredStudents = classFilter === 'all'
@@ -98,8 +99,25 @@ export function EntryView({
                       <td>{entry.remarks || '-'}</td>
                       <td>
                         <div className="action-group">
-                          <button type="button" className="text-button" onClick={() => setModal({ type: 'attendance', record: entry })}>Edit</button>
-                          <button type="button" className="text-button danger" onClick={() => onDeleteAttendance(entry.id)}>Delete</button>
+                          <button type="button" className="text-button" onClick={() => setModal({ type: 'attendance', record: entry })} disabled={Boolean(deletingId)}>Edit</button>
+                          <button
+                            type="button"
+                            className={`text-button danger ${deletingId === entry.id ? 'button-loading' : ''}`}
+                            disabled={Boolean(deletingId)}
+                            onClick={async () => {
+                              if (window.confirm('Are you sure you want to delete this attendance record?')) {
+                                setDeletingId(entry.id);
+                                try {
+                                  await onDeleteAttendance(entry.id);
+                                } finally {
+                                  setDeletingId(null);
+                                }
+                              }
+                            }}
+                          >
+                            {deletingId === entry.id ? <Loader2 size={13} className="spinner" /> : null}
+                            {deletingId === entry.id ? 'Deleting...' : 'Delete'}
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -165,8 +183,25 @@ export function EntryView({
                           <td>{entry.grade || '-'}</td>
                           <td>
                             <div className="action-group">
-                              <button type="button" className="text-button" onClick={() => setModal({ type: 'mark', record: entry })}>Edit</button>
-                              <button type="button" className="text-button danger" onClick={() => onDeleteMark(entry.id)}>Delete</button>
+                              <button type="button" className="text-button" onClick={() => setModal({ type: 'mark', record: entry })} disabled={Boolean(deletingId)}>Edit</button>
+                              <button
+                                type="button"
+                                className={`text-button danger ${deletingId === entry.id ? 'button-loading' : ''}`}
+                                disabled={Boolean(deletingId)}
+                                onClick={async () => {
+                                  if (window.confirm('Are you sure you want to delete this mark record?')) {
+                                    setDeletingId(entry.id);
+                                    try {
+                                      await onDeleteMark(entry.id);
+                                    } finally {
+                                      setDeletingId(null);
+                                    }
+                                  }
+                                }}
+                              >
+                                {deletingId === entry.id ? <Loader2 size={13} className="spinner" /> : null}
+                                {deletingId === entry.id ? 'Deleting...' : 'Delete'}
+                              </button>
                             </div>
                           </td>
                         </tr>

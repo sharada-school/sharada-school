@@ -12,7 +12,9 @@ import {
   CheckCircle2,
   ArrowRight,
   ShieldCheck,
-  Trash2
+  Trash2,
+  Pencil,
+  Loader2
 } from 'lucide-react';
 import Stat from '../components/common/Stat';
 import { getStudentMarks, getClassLabel, getStudentName } from '../utils/formatters';
@@ -39,6 +41,7 @@ export function StudentDetailView({ student, onBack, onEditStudent, onPromoteStu
   availableYears.sort((a, b) => b.localeCompare(a));
 
   const [selectedYear, setSelectedYear] = useState(currentStudentYear);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     setSelectedYear(currentStudentYear);
@@ -108,7 +111,14 @@ export function StudentDetailView({ student, onBack, onEditStudent, onPromoteStu
       <div className="detail-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '20px' }}>
         <button className="back-button" onClick={onBack} style={{ margin: 0 }}>← Back to students</button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-          <button className="outline-button" onClick={() => onEditStudent(student)}>Edit student</button>
+          <button
+            type="button"
+            className="outline-button"
+            onClick={() => onEditStudent(student)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Pencil size={15} /> Edit student
+          </button>
           {isAdmin && student.status !== 'Graduated' && (
             <button className="outline-button" onClick={() => onPromoteStudent?.(student)}>
               <GraduationCap size={15} /> Promote Student
@@ -117,15 +127,22 @@ export function StudentDetailView({ student, onBack, onEditStudent, onPromoteStu
           {isAdmin && (
             <button
               type="button"
-              className="outline-button danger"
+              className={`outline-button danger ${isDeleting ? 'button-loading' : ''}`}
+              disabled={isDeleting}
               style={{ color: '#dc2626', borderColor: '#fca5a5', display: 'flex', alignItems: 'center', gap: '6px' }}
-              onClick={() => {
+              onClick={async () => {
                 if (window.confirm(`Are you sure you want to delete ${studentFullName}? This will permanently remove the student and all associated marks, attendance, and academic records.`)) {
-                  onDeleteStudent?.(student.id || student._id);
+                  setIsDeleting(true);
+                  try {
+                    await onDeleteStudent?.(student.id || student._id);
+                  } finally {
+                    setIsDeleting(false);
+                  }
                 }
               }}
             >
-              <Trash2 size={15} /> Delete student
+              {isDeleting ? <Loader2 size={15} className="spinner" /> : <Trash2 size={15} />}
+              {isDeleting ? 'Deleting...' : 'Delete student'}
             </button>
           )}
         </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, GraduationCap, ChevronRight, Trash2 } from 'lucide-react';
+import { Search, GraduationCap, ChevronRight } from 'lucide-react';
 import { getClassLabel, getStudentAverage, getStudentName } from '../utils/formatters';
 
 export function StudentsView({
@@ -11,7 +11,6 @@ export function StudentsView({
   classFilter,
   setClassFilter,
   onPromoteClass,
-  onDeleteStudent,
   isAdmin
 }) {
   return (
@@ -78,27 +77,7 @@ export function StudentsView({
                     <div className="mini-progress"><span style={{ width: `${getStudentAverage(s)}%` }}></span></div>
                     <small>{getStudentAverage(s)}% avg.</small>
                   </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          className="icon-button"
-                          title="Delete student"
-                          style={{ color: '#dc2626', padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`Are you sure you want to delete ${name}? This will permanently remove the student and all associated records.`)) {
-                              onDeleteStudent?.(s.id || s._id);
-                            }
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                      <ChevronRight size={16} className="muted" />
-                    </div>
-                  </td>
+                  <td><ChevronRight size={16} className="muted" /></td>
                 </tr>
               );
             })}
