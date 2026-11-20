@@ -28,6 +28,8 @@ const pool = new Pool(
   connectionString
     ? {
         connectionString,
+        max: 20, // Supports up to 20 parallel requests concurrently
+        idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 10000,
         ssl: isLocal ? false : { rejectUnauthorized: false }
       }
@@ -37,6 +39,8 @@ const pool = new Pool(
         user: process.env.PGUSER || 'postgres',
         password: process.env.PGPASSWORD || 'postgres',
         database: process.env.PGDATABASE || 'sharada_school',
+        max: 20,
+        idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 10000,
         ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false
       }
@@ -197,6 +201,7 @@ const initTables = async () => {
       ALTER TABLE public.students ADD COLUMN IF NOT EXISTS father_name VARCHAR(255);
       ALTER TABLE public.students ADD COLUMN IF NOT EXISTS mother_name VARCHAR(255);
       ALTER TABLE public.students ADD COLUMN IF NOT EXISTS address TEXT;
+      ALTER TABLE public.teachers ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
 
       CREATE TABLE IF NOT EXISTS public.attendance (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -527,23 +532,33 @@ const Teacher = {
   },
 
   async findByIdAndUpdate(id, data) {
+    const fields = [];
+    const params = [];
+    if (data.name !== undefined) {
+      params.push(data.name);
+      fields.push(`name = $${params.length}`);
+    }
+    if (data.email !== undefined) {
+      params.push(data.email ? String(data.email).toLowerCase().trim() : null);
+      fields.push(`email = $${params.length}`);
+    }
+    if (data.phone !== undefined) {
+      params.push(data.phone || null);
+      fields.push(`phone = $${params.length}`);
+    }
+    if (data.qualification !== undefined) {
+      params.push(data.qualification);
+      fields.push(`qualification = $${params.length}`);
+    }
+    if (data.designation !== undefined) {
+      params.push(data.designation);
+      fields.push(`designation = $${params.length}`);
+    }
+    if (fields.length === 0) return this.findById(id);
+    params.push(id);
     const res = await pool.query(
-      `UPDATE public.teachers
-       SET name = COALESCE($1, name),
-           email = COALESCE($2, email),
-           phone = COALESCE($3, phone),
-           qualification = COALESCE($4, qualification),
-           designation = COALESCE($5, designation)
-       WHERE id = $6
-       RETURNING *`,
-      [
-        data.name,
-        data.email ? String(data.email).toLowerCase().trim() : undefined,
-        data.phone,
-        data.qualification,
-        data.designation,
-        id
-      ]
+      `UPDATE public.teachers SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`,
+      params
     );
     return res.rows[0] ? toCamelCase(res.rows[0]) : null;
   },
@@ -702,6 +717,18 @@ const StudentAcademicHistory = {
   async countDocuments(filter = {}) {
     const list = await this.find(filter);
     return list.length;
+  },
+
+  async deleteMany(filter = {}) {
+    if (filter.studentId) {
+      await pool.query('DELETE FROM public.student_academic_history WHERE student_id = $1', [filter.studentId]);
+    }
+    return true;
+  },
+
+  async findByIdAndDelete(id) {
+    const res = await pool.query('DELETE FROM public.student_academic_history WHERE id = $1 RETURNING *', [id]);
+    return res.rows[0] ? toCamelCase(res.rows[0]) : null;
   }
 };
 
@@ -1021,6 +1048,14 @@ const Student = {
   async countDocuments(filter = {}) {
     const list = await this.find(filter);
     return list.length;
+  },
+
+  async findByIdAndDelete(id) {
+    if (!id) return null;
+    const strId = String(id).trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(strId)) return null;
+    const res = await pool.query('DELETE FROM public.students WHERE id = $1 RETURNING *', [strId]);
+    return res.rows[0] ? toCamelCase(res.rows[0]) : null;
   }
 };
 
@@ -1178,6 +1213,13 @@ const Attendance = {
       [data.studentId, data.date, data.status, data.sessionStatus, data.attendanceType, data.remarks, id]
     );
     return res.rows[0] ? toCamelCase(res.rows[0]) : null;
+  },
+
+  async deleteMany(filter = {}) {
+    if (filter.studentId) {
+      await pool.query('DELETE FROM public.attendance WHERE student_id = $1', [filter.studentId]);
+    }
+    return true;
   },
 
   async findByIdAndDelete(id) {
@@ -1464,6 +1506,13 @@ const Mark = {
       if (!res.rows[0]) return null;
       return Mark.findById(id).populate(populates.map(p => p.field));
     });
+  },
+
+  async deleteMany(filter = {}) {
+    if (filter.studentId) {
+      await pool.query('DELETE FROM public.marks WHERE student_id = $1', [filter.studentId]);
+    }
+    return true;
   },
 
   async findByIdAndDelete(id) {

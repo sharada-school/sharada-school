@@ -16,6 +16,7 @@ export function TeachersView({ teachers, onEditTeacher, onDeleteTeacher }) {
             <div className={`teacher-avatar t${i}`}>{teacher.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}</div>
             <h3>{teacher.name}</h3>
             <div className="teacher-meta"><span>Email</span><strong>{teacher.email || 'Not provided'}</strong></div>
+            <div className="teacher-meta"><span>Phone</span><strong>{teacher.phone || 'Not provided'}</strong></div>
             <div className="action-group" style={{ marginTop: '16px' }}>
               <button type="button" className="text-button" onClick={() => onEditTeacher(teacher)}>Edit</button>
               <button type="button" className="text-button danger" onClick={() => onDeleteTeacher(teacher.id)}>Delete</button>

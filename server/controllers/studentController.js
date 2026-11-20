@@ -433,10 +433,59 @@ const promoteStudents = async (req, res) => {
   }
 };
 
+const deleteStudent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Student ID is required' });
+    }
+
+    const student = await Student.findById(id);
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const studentId = student.id || student._id || id;
+
+    // Delete associated records from marks, attendance, and student_academic_history
+    await Promise.all([
+      StudentAcademicHistory.deleteMany({ studentId }),
+      Mark.deleteMany({ studentId }),
+      Attendance.deleteMany({ studentId })
+    ]);
+
+    // Delete the student record
+    await Student.findByIdAndDelete(studentId);
+
+    // Record audit log
+    await captureAudit(
+      'delete',
+      'students',
+      student,
+      {
+        admissionNo: student.admissionNo || student.admissionNumber,
+        studentName: student.studentName || `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+        className: student.className
+      },
+      req.user
+    );
+
+    res.json({
+      success: true,
+      message: 'Student and associated records deleted successfully',
+      id: studentId
+    });
+  } catch (error) {
+    console.error('Error deleting student:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete student.' });
+  }
+};
+
 module.exports = {
   getStudentById,
   getStudentAcademicHistory,
   createStudent,
   updateStudent,
+  deleteStudent,
   promoteStudents
 };

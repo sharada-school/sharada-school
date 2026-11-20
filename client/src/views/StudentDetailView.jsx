@@ -11,13 +11,14 @@ import {
   Calendar,
   CheckCircle2,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
 import Stat from '../components/common/Stat';
 import { getStudentMarks, getClassLabel, getStudentName } from '../utils/formatters';
 import { getConvertedMark, getRegisterGrade } from '../utils/grading';
 
-export function StudentDetailView({ student, onBack, onEditStudent, onPromoteStudent, isAdmin, attendanceRecords = [] }) {
+export function StudentDetailView({ student, onBack, onEditStudent, onPromoteStudent, onDeleteStudent, isAdmin, attendanceRecords = [] }) {
   const allStudentMarks = getStudentMarks(student);
   const currentStudentYear = student.academicYear || '2024-2025';
 
@@ -111,6 +112,20 @@ export function StudentDetailView({ student, onBack, onEditStudent, onPromoteStu
           {isAdmin && student.status !== 'Graduated' && (
             <button className="outline-button" onClick={() => onPromoteStudent?.(student)}>
               <GraduationCap size={15} /> Promote Student
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              type="button"
+              className="outline-button danger"
+              style={{ color: '#dc2626', borderColor: '#fca5a5', display: 'flex', alignItems: 'center', gap: '6px' }}
+              onClick={() => {
+                if (window.confirm(`Are you sure you want to delete ${studentFullName}? This will permanently remove the student and all associated marks, attendance, and academic records.`)) {
+                  onDeleteStudent?.(student.id || student._id);
+                }
+              }}
+            >
+              <Trash2 size={15} /> Delete student
             </button>
           )}
         </div>

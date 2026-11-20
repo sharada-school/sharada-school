@@ -21,10 +21,12 @@ export function Login({ onLogin }) {
     setError('');
     setLoading(true);
     try {
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPassword = password.trim();
       const response = await apiFetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email: cleanEmail, password: cleanPassword })
       });
       if (response.ok) {
         onLogin(await response.json());
@@ -33,7 +35,7 @@ export function Login({ onLogin }) {
         setError(result.error || 'Invalid email or password');
       }
     } catch {
-      setError('Unable to sign in. Please try again.');
+      setError('Unable to sign in. Please check your internet connection or server status.');
     } finally {
       setLoading(false);
     }
@@ -220,7 +222,7 @@ export function Login({ onLogin }) {
         {screen === 'login' && (
           <form onSubmit={handleLogin}>
             <div className="login-heading"><p>Sign In</p></div>
-            <label>Email address<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required /></label>
+            <label>Email address<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoCapitalize="none" autoCorrect="off" spellCheck="false" required /></label>
             <label>Password<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required /></label>
             {error && <div className="error">{error}</div>}
             {success && <div className="success">{success}</div>}
@@ -234,7 +236,7 @@ export function Login({ onLogin }) {
           <form onSubmit={handleRegisterRequest}>
             <div className="login-heading"><p>Create Account</p></div>
             <label>Full Name<input value={name} onChange={(e) => setName(e.target.value)} type="text" required /></label>
-            <label>Email address<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required /></label>
+            <label>Email address<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoCapitalize="none" autoCorrect="off" spellCheck="false" required /></label>
             <label>Password<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required /></label>
             <p style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>Password must be at least 6 characters</p>
             {error && <div className="error">{error}</div>}
@@ -263,7 +265,7 @@ export function Login({ onLogin }) {
           <form onSubmit={handleForgotPasswordRequest}>
             <div className="login-heading"><p>Reset Password</p></div>
             <p style={{ marginBottom: '16px', textAlign: 'center', fontSize: '14px', color: '#666' }}>Enter your email address and we'll send you a verification code</p>
-            <label>Email address<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required /></label>
+            <label>Email address<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoCapitalize="none" autoCorrect="off" spellCheck="false" required /></label>
             {error && <div className="error">{error}</div>}
             {success && <div className="success">{success}</div>}
             <button type="submit" disabled={loading} className="primary-button wide">{loading ? 'Sending...' : 'Send Verification Code'} <ChevronRight size={17} /></button>

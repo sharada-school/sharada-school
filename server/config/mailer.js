@@ -68,7 +68,7 @@ const sendOtp = async (email, code, purpose) => {
   const text = `Your Sharada School verification code is ${code}. It expires in 10 minutes. If you did not request this, ignore this email.`;
 
   // 1. If RESEND_API_KEY is configured, send via HTTPS REST API (Port 443).
-  // This works on Render Free Tier without SMTP credentials or open SMTP ports.
+  // This completely bypasses Render Free Tier's block on SMTP ports (25/465/587).
   if (process.env.RESEND_API_KEY) {
     const fromAddress = process.env.SMTP_FROM || 'Sharada School <onboarding@resend.dev>';
     const res = await fetch('https://api.resend.com/emails', {
@@ -94,9 +94,9 @@ const sendOtp = async (email, code, purpose) => {
     return;
   }
 
-  // 2. Otherwise use SMTP mailTransport (requires SMTP environment variables)
+  // 2. Otherwise use SMTP mailTransport
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    throw new Error('Email service is not configured. Please set RESEND_API_KEY (recommended) or set SMTP_HOST, SMTP_USER, and SMTP_PASS in environment variables.');
+    throw new Error('SMTP is not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_FROM, or provide RESEND_API_KEY.');
   }
 
   await mailTransport.sendMail({

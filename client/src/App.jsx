@@ -284,6 +284,24 @@ export function App() {
     setTimeout(() => setNotice(''), 2600);
   };
 
+  const deleteStudent = async (studentId) => {
+    try {
+      const response = await apiFetch(`/api/students/${studentId}`, { method: 'DELETE' }, user);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Delete failed');
+      }
+
+      setStudents((prev) => prev.filter((student) => (student.id || student._id) !== studentId));
+      setSelected(null);
+      await refreshDashboard();
+      setNotice('Student deleted successfully');
+    } catch (error) {
+      setNotice(error.message || 'Unable to delete student');
+    }
+    setTimeout(() => setNotice(''), 2600);
+  };
+
   const handlePromoteStudents = async (payload) => {
     try {
       const response = await apiFetch('/api/students/promote', {
@@ -409,6 +427,7 @@ export function App() {
             onBack={() => { setSelected(null); setView('students'); setMobileMenuOpen(false); }}
             onEditStudent={(student) => setModal({ type: 'student', record: student })}
             onPromoteStudent={(student) => setModal({ type: 'promote', mode: 'student', student })}
+            onDeleteStudent={deleteStudent}
             isAdmin={user.role === 'admin'}
             attendanceRecords={attendanceRecords}
           />
@@ -430,6 +449,7 @@ export function App() {
             classFilter={classFilter}
             setClassFilter={setClassFilter}
             onPromoteClass={(cls) => setModal({ type: 'promote', mode: 'class', className: cls })}
+            onDeleteStudent={deleteStudent}
             isAdmin={user.role === 'admin'}
           />
         ) : view === 'attendance' ? (
@@ -485,6 +505,7 @@ export function App() {
             type={modal.type || modal}
             onClose={() => setModal(null)}
             onSave={saveRecord}
+            onDeleteStudent={deleteStudent}
             onRefresh={refreshDashboard}
             user={user}
             students={students}

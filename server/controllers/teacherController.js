@@ -21,7 +21,8 @@ const updateTeacher = async (req, res) => {
       name: req.body.name || '',
       qualification: req.body.qualification || '',
       designation: req.body.designation || '',
-      email: req.body.email || ''
+      email: req.body.email || '',
+      phone: req.body.phone !== undefined ? req.body.phone : undefined
     },
     { new: true }
   );

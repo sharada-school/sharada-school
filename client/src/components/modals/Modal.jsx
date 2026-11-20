@@ -28,8 +28,10 @@ export function Modal({
   type,
   onClose,
   onSave,
+  onDeleteStudent,
   students,
   teachers,
+  user,
   attendanceItem = null,
   studentItem = null,
   markItem = null,
@@ -101,7 +103,8 @@ export function Modal({
       return {
         id: editingItem.id,
         name: editingItem.name || '',
-        email: editingItem.email || ''
+        email: editingItem.email || '',
+        phone: editingItem.phone || ''
       };
     }
 
@@ -327,8 +330,9 @@ export function Modal({
           </>
         ) : type === 'teacher' ? (
           <>
-            <Field label="Full name" placeholder="Full name" value={form.name || ''} onChange={(v) => set('name', v)} />
-            <Field label="Email" type="email" placeholder="Email" value={form.email || ''} onChange={(v) => set('email', v)} />
+            <Field label="Full name" placeholder="Full name" value={form.name || ''} onChange={(v) => set('name', v)} required />
+            <Field label="Email" type="email" placeholder="Email" value={form.email || ''} onChange={(v) => set('email', v)} required />
+            <Field label="Phone number" type="tel" placeholder="Phone number (e.g. 9876543210)" value={form.phone || ''} onChange={(v) => set('phone', v)} required={false} />
           </>
         ) : type === 'mark' ? (
           <>
@@ -447,11 +451,31 @@ export function Modal({
           </>
         )}
 
-        <div className="modal-actions">
-          <button type="button" className="outline-button" onClick={onClose}>Cancel</button>
-          <button type="submit" className="primary-button">
-            {type === 'student' ? (isEditing ? 'Update student' : 'Create student') : type === 'teacher' ? (isEditing ? 'Update teacher' : 'Create teacher') : type === 'mark' ? (isEditing ? 'Update marks' : 'Submit marks') : (isEditing ? 'Update attendance' : 'Submit attendance')}
-          </button>
+        <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            {isEditing && type === 'student' && user?.role === 'admin' && onDeleteStudent && (
+              <button
+                type="button"
+                className="outline-button danger"
+                style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+                onClick={() => {
+                  const studentName = form.studentName || `${form.firstName || ''} ${form.lastName || ''}`.trim() || 'this student';
+                  if (window.confirm(`Are you sure you want to delete ${studentName}? This will permanently remove the student and all associated records.`)) {
+                    onDeleteStudent(form.id);
+                    onClose();
+                  }
+                }}
+              >
+                Delete student
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" className="outline-button" onClick={onClose}>Cancel</button>
+            <button type="submit" className="primary-button">
+              {type === 'student' ? (isEditing ? 'Update student' : 'Create student') : type === 'teacher' ? (isEditing ? 'Update teacher' : 'Create teacher') : type === 'mark' ? (isEditing ? 'Update marks' : 'Submit marks') : (isEditing ? 'Update attendance' : 'Submit attendance')}
+            </button>
+          </div>
         </div>
       </form>
     </div>

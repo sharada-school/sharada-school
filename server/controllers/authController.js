@@ -5,31 +5,43 @@ const { createSession, passwordResetTokens } = require('../middleware/auth');
 const { createOtpChallenge, consumeOtp, OTP_TTL_MS } = require('../config/mailer');
 
 const login = async (req, res) => {
-  const email = String(req.body.email || '').trim().toLowerCase().replace(/^["']|["']$/g, '');
-  const password = String(req.body.password || '').trim().replace(/^["']|["']$/g, '');
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase().replace(/^["']|["']$/g, '');
+    const password = String(req.body.password || '').trim().replace(/^["']|["']$/g, '');
 
-  let user = await User.findOne({ email });
-  console.log(`🔑 Login attempt for: "${email}" | User found in DB: ${!!user}`);
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
 
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid email or password' });
+    let user = await User.findOne({ email });
+    console.log(`🔑 Login attempt for: "${email}" | User found in DB: ${!!user}`);
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const isMatch = await verifyPassword(password, user.password, email);
+    console.log(`🔑 Comparing password for "${email}" => result: ${isMatch}`);
+
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const role = user.role || 'teacher';
+    const userId = (user.id || user._id || 'user').toString();
+    const token = createSession({ ...user, role, id: userId, _id: userId });
+
+    return res.json({
+      id: userId,
+      name: user.name || 'User',
+      email: user.email,
+      role,
+      token
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    return res.status(500).json({ error: 'An error occurred during sign in. Please try again.' });
   }
-
-  const isMatch = await verifyPassword(password, user.password, email);
-  console.log(`🔑 Comparing password for "${email}" => result: ${isMatch}`);
-
-  if (!isMatch) {
-    return res.status(401).json({ error: 'Invalid email or password' });
-  }
-
-  const role = user.role || 'teacher';
-  res.json({
-    id: (user.id || user._id || 'user').toString(),
-    name: user.name || 'User',
-    email: user.email,
-    role,
-    token: createSession({ ...user, role })
-  });
 };
 
 const registerRequest = async (req, res) => {
